@@ -1,0 +1,68 @@
+# API Keys and Sensitive Data
+config.py
+*.env
+.env*
+
+# Logs and Runtime Data
+bot_log.txt
+trade_log.csv
+bot_state.json
+dynamic_config.json
+performance_report_*.csv
+trade_analysis_*.csv
+strategy_performance.json
+
+# Backup Files
+*.backup_*
+enhanced_config.json.backup_*
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+env/
+ENV/
+
+# IDE Files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# Test Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/

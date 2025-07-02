@@ -1,0 +1,318 @@
+//@version=5
+strategy("Enhanced Multi-Strategy Bot - Buy Dips Sell Peaks",
+         shorttitle="Multi-Strategy Bot",
+         overlay=true,
+         default_qty_type=strategy.fixed,
+         default_qty_value=15,
+         currency=currency.USD,
+         commission_type=strategy.commission.percent,
+         commission_value=0.1)
+
+// =============================================================================
+// INPUT PARAMETERS
+// =============================================================================
+
+// RSI Strategy Parameters
+rsi_period = input.int(14, "RSI Period", minval=1, group="RSI Strategy")
+rsi_oversold = input.int(30, "RSI Oversold Level", minval=0, maxval=50, group="RSI Strategy")
+rsi_overbought = input.int(70, "RSI Overbought Level", minval=50, maxval=100, group="RSI Strategy")
+
+// Bollinger Bands Parameters
+bb_period = input.int(20, "BB Period", minval=1, group="Bollinger Bands")
+bb_std = input.float(2.0, "BB Standard Deviation", minval=0.1, group="Bollinger Bands")
+
+// Moving Average Contrarian Parameters
+ma_short = input.int(3, "MA Short Period", minval=1, group="MA Contrarian")
+ma_long = input.int(8, "MA Long Period", minval=1, group="MA Contrarian")
+
+// VWAP Parameters
+vwap_period = input.int(20, "VWAP Period", minval=1, group="VWAP Strategy")
+
+// Market Conditions
+volatility_threshold = input.float(0.02, "Volatility Threshold", minval=0.001, group="Market Conditions")
+momentum_window = input.int(10, "Momentum Window", minval=1, group="Market Conditions")
+
+// Confidence Thresholds
+base_confidence = input.float(0.25, "Base Confidence Threshold", minval=0.1, maxval=0.5, group="Trading")
+min_strategies_agree = input.int(2, "Minimum Strategies to Agree", minval=2, maxval=4, group="Trading")
+
+// Risk Management
+daily_loss_limit = input.float(2.0, "Daily Loss Limit ($)", minval=0.1, group="Risk Management")
+trade_cooldown_bars = input.int(5, "Trade Cooldown (bars)", minval=1, group="Risk Management")
+
+// =============================================================================
+// STRATEGY 1: RSI CONTRARIAN
+// =============================================================================
+
+rsi_calc = ta.rsi(close, rsi_period)
+
+// Contrarian RSI Logic
+rsi_buy_signal = rsi_calc >= rsi_overbought  // Buy when overbought (expecting dip)
+rsi_sell_signal = rsi_calc <= rsi_oversold   // Sell when oversold (expecting bounce)
+rsi_confidence = rsi_buy_signal ? math.min(1.0, (rsi_calc - rsi_overbought) / 15) :
+                 rsi_sell_signal ? math.min(1.0, (rsi_oversold - rsi_calc) / 15) : 0.0
+
+rsi_action = rsi_buy_signal ? 1 : rsi_sell_signal ? -1 : 0
+
+// =============================================================================
+// STRATEGY 2: BOLLINGER BANDS CONTRARIAN
+// =============================================================================
+
+bb_basis = ta.sma(close, bb_period)
+bb_dev = bb_std * ta.stdev(close, bb_period)
+bb_upper = bb_basis + bb_dev
+bb_lower = bb_basis - bb_dev
+
+// Contrarian BB Logic
+bb_buy_signal = close >= bb_upper * 0.98   // Buy near upper band (expecting pullback)
+bb_sell_signal = close <= bb_lower * 1.02  // Sell near lower band (expecting bounce)
+
+bb_distance_upper = close >= bb_upper * 0.98 ? (close - bb_basis) / (bb_upper - bb_basis) : 0
+bb_distance_lower = close <= bb_lower * 1.02 ? (bb_basis - close) / (bb_basis - bb_lower) : 0
+bb_confidence = bb_buy_signal ? math.min(1.0, bb_distance_upper) :
+                bb_sell_signal ? math.min(1.0, bb_distance_lower) : 0.0
+
+bb_action = bb_buy_signal ? 1 : bb_sell_signal ? -1 : 0
+
+// =============================================================================
+// STRATEGY 3: MOVING AVERAGE CONTRARIAN
+// =============================================================================
+
+ma_short_val = ta.sma(close, ma_short)
+ma_long_val = ta.sma(close, ma_long)
+
+// Contrarian MA Logic
+ma_buy_signal = ma_short_val > ma_long_val   // Buy during uptrend (expecting dip)
+ma_sell_signal = ma_short_val < ma_long_val  // Sell during downtrend (expecting bounce)
+
+ma_spread = math.abs(ma_short_val - ma_long_val) / close
+ma_confidence = ma_buy_signal or ma_sell_signal ? math.min(1.0, ma_spread * 200) : 0.0
+
+ma_action = ma_buy_signal ? 1 : ma_sell_signal ? -1 : 0
+
+// =============================================================================
+// STRATEGY 4: VWAP CONTRARIAN
+// =============================================================================
+
+// Custom VWAP calculation
+vwap_sum_pv = 0.0
+vwap_sum_vol = 0.0
+for i = 0 to vwap_period - 1
+    typical_price = (high[i] + low[i] + close[i]) / 3
+    vwap_sum_pv := vwap_sum_pv + (typical_price * volume[i])
+    vwap_sum_vol := vwap_sum_vol + volume[i]
+
+vwap_val = vwap_sum_vol > 0 ? vwap_sum_pv / vwap_sum_vol : close
+
+// Volume analysis
+recent_volume = (volume + volume[1] + volume[2]) / 3
+long_term_volume = ta.sma(volume, vwap_period)
+volume_ratio = long_term_volume > 0 ? recent_volume / long_term_volume : 1
+
+// VWAP deviation
+vwap_deviation = (close - vwap_val) / vwap_val
+
+// Contrarian VWAP Logic
+vwap_buy_signal = vwap_deviation > 0.005 and volume_ratio > 1.2   // Price above VWAP with volume
+vwap_sell_signal = vwap_deviation < -0.005 and volume_ratio > 1.2 // Price below VWAP with volume
+
+vwap_confidence = (vwap_buy_signal or vwap_sell_signal) ?
+                  math.min(1.0, math.abs(vwap_deviation) * 100 * math.min(volume_ratio, 2)) : 0.0
+
+vwap_action = vwap_buy_signal ? 1 : vwap_sell_signal ? -1 : 0
+
+// =============================================================================
+// MARKET CONDITIONS ANALYSIS
+// =============================================================================
+
+// Volatility calculation
+volatility = ta.stdev(close, momentum_window) / close
+
+// Momentum calculation
+momentum = (close - close[momentum_window]) / close[momentum_window]
+
+// 5-minute change (approximate with 5-bar change)
+price_change_5bar = (close - close[5]) / close[5]
+
+// Market condition flags
+is_high_volatility = volatility > volatility_threshold
+strong_uptrend = momentum > 0.01 and price_change_5bar > 0.005
+strong_downtrend = momentum < -0.01 and price_change_5bar < -0.005
+
+// =============================================================================
+// CONSENSUS VOTING SYSTEM
+// =============================================================================
+
+// Count votes
+buy_votes = (rsi_action == 1 ? 1 : 0) + (bb_action == 1 ? 1 : 0) + (ma_action == 1 ? 1 : 0) + (vwap_action == 1 ? 1 : 0)
+sell_votes = (rsi_action == -1 ? 1 : 0) + (bb_action == -1 ? 1 : 0) + (ma_action == -1 ? 1 : 0) + (vwap_action == -1 ? 1 : 0)
+
+// Calculate confidence
+buy_confidence_total = (rsi_action == 1 ? rsi_confidence : 0) + (bb_action == 1 ? bb_confidence : 0) +
+                       (ma_action == 1 ? ma_confidence : 0) + (vwap_action == 1 ? vwap_confidence : 0)
+sell_confidence_total = (rsi_action == -1 ? rsi_confidence : 0) + (bb_action == -1 ? bb_confidence : 0) +
+                        (ma_action == -1 ? ma_confidence : 0) + (vwap_action == -1 ? vwap_confidence : 0)
+
+// Determine consensus action
+consensus_action = 0
+consensus_confidence = 0.0
+volatility_boost = is_high_volatility ? 1.2 : 1.0
+
+// Strong consensus (3+ strategies)
+if buy_votes >= 3
+    base_conf = (buy_confidence_total / buy_votes) * volatility_boost
+    // Boost for optimal conditions
+    if strong_downtrend
+        base_conf := base_conf * 1.4
+    else if price_change_5bar < -0.002
+        base_conf := base_conf * 1.15
+    consensus_action := 1
+    consensus_confidence := math.min(1.0, base_conf)
+
+else if sell_votes >= 3
+    base_conf = (sell_confidence_total / sell_votes) * volatility_boost
+    // Boost for optimal conditions
+    if strong_uptrend
+        base_conf := base_conf * 1.4
+    else if price_change_5bar > 0.002
+        base_conf := base_conf * 1.15
+    consensus_action := -1
+    consensus_confidence := math.min(1.0, base_conf)
+
+// Moderate consensus (2+ strategies)
+else if buy_votes >= min_strategies_agree
+    base_conf = (buy_confidence_total / buy_votes) * volatility_boost * 0.8
+    if strong_downtrend
+        base_conf := base_conf * 1.2
+    consensus_action := 1
+    consensus_confidence := math.min(0.8, base_conf)
+
+else if sell_votes >= min_strategies_agree
+    base_conf = (sell_confidence_total / sell_votes) * volatility_boost * 0.8
+    if strong_uptrend
+        base_conf := base_conf * 1.2
+    consensus_action := -1
+    consensus_confidence := math.min(0.8, base_conf)
+
+// Adjust confidence for extreme volatility
+if volatility > 0.05
+    consensus_confidence := consensus_confidence * 0.8
+
+// =============================================================================
+// DYNAMIC CONFIDENCE THRESHOLDS
+// =============================================================================
+
+min_confidence = base_confidence
+
+// Adjust based on market conditions
+if (consensus_action == 1 and strong_downtrend) or (consensus_action == -1 and strong_uptrend)
+    min_confidence := base_confidence * 0.8  // Lower threshold for optimal trades
+else if is_high_volatility
+    min_confidence := base_confidence * 1.2  // Higher threshold in high volatility
+
+// =============================================================================
+// TRADE EXECUTION LOGIC
+// =============================================================================
+
+// Trade cooldown tracking
+var int last_trade_bar = 0
+can_trade = bar_index - last_trade_bar >= trade_cooldown_bars
+
+// Position tracking
+var bool holding_position = false
+
+// Entry conditions
+should_buy = consensus_action == 1 and not holding_position and consensus_confidence >= min_confidence and can_trade
+should_sell = consensus_action == -1 and holding_position and consensus_confidence >= min_confidence and can_trade
+
+// Execute trades
+if should_buy
+    strategy.entry("BUY", strategy.long, comment="Multi-Strategy BUY")
+    holding_position := true
+    last_trade_bar := bar_index
+
+if should_sell
+    strategy.close("BUY", comment="Multi-Strategy SELL")
+    holding_position := false
+    last_trade_bar := bar_index
+
+// =============================================================================
+// VISUALIZATION
+// =============================================================================
+
+// Plot moving averages
+plot(ma_short_val, "MA Short", color.blue, 1)
+plot(ma_long_val, "MA Long", color.red, 1)
+
+// Plot Bollinger Bands
+p1 = plot(bb_upper, "BB Upper", color.gray, 1)
+p2 = plot(bb_lower, "BB Lower", color.gray, 1)
+fill(p1, p2, color.new(color.gray, 95))
+
+// Plot VWAP
+plot(vwap_val, "VWAP", color.orange, 2)
+
+// Plot RSI (scaled to price for visualization)
+rsi_scaled = close * (1 + (rsi_calc - 50) / 1000)
+plot(rsi_scaled, "RSI Scaled", color.purple, 1, display=display.none)
+
+// Signal visualization
+plotshape(should_buy, "Buy Signal", shape.triangleup, location.belowbar, color.green, size=size.small)
+plotshape(should_sell, "Sell Signal", shape.triangledown, location.abovebar, color.red, size=size.small)
+
+// Market condition background
+bgcolor(strong_uptrend ? color.new(color.red, 90) : strong_downtrend ? color.new(color.green, 90) : na, title="Trend Background")
+
+// =============================================================================
+// INFORMATION TABLE
+// =============================================================================
+
+if barstate.islast
+    var table info_table = table.new(position.top_right, 3, 10, bgcolor=color.white, border_width=1)
+
+    table.cell(info_table, 0, 0, "Strategy", text_color=color.black, text_size=size.small)
+    table.cell(info_table, 1, 0, "Signal", text_color=color.black, text_size=size.small)
+    table.cell(info_table, 2, 0, "Confidence", text_color=color.black, text_size=size.small)
+
+    table.cell(info_table, 0, 1, "RSI", text_color=color.black, text_size=size.small)
+    table.cell(info_table, 1, 1, rsi_action == 1 ? "BUY" : rsi_action == -1 ? "SELL" : "HOLD",
+               text_color=rsi_action == 1 ? color.green : rsi_action == -1 ? color.red : color.gray, text_size=size.small)
+    table.cell(info_table, 2, 1, str.tostring(rsi_confidence, "#.##"), text_color=color.black, text_size=size.small)
+
+    table.cell(info_table, 0, 2, "Bollinger", text_color=color.black, text_size=size.small)
+    table.cell(info_table, 1, 2, bb_action == 1 ? "BUY" : bb_action == -1 ? "SELL" : "HOLD",
+               text_color=bb_action == 1 ? color.green : bb_action == -1 ? color.red : color.gray, text_size=size.small)
+    table.cell(info_table, 2, 2, str.tostring(bb_confidence, "#.##"), text_color=color.black, text_size=size.small)
+
+    table.cell(info_table, 0, 3, "MA Contrarian", text_color=color.black, text_size=size.small)
+    table.cell(info_table, 1, 3, ma_action == 1 ? "BUY" : ma_action == -1 ? "SELL" : "HOLD",
+               text_color=ma_action == 1 ? color.green : ma_action == -1 ? color.red : color.gray, text_size=size.small)
+    table.cell(info_table, 2, 3, str.tostring(ma_confidence, "#.##"), text_color=color.black, text_size=size.small)
+
+    table.cell(info_table, 0, 4, "VWAP", text_color=color.black, text_size=size.small)
+    table.cell(info_table, 1, 4, vwap_action == 1 ? "BUY" : vwap_action == -1 ? "SELL" : "HOLD",
+               text_color=vwap_action == 1 ? color.green : vwap_action == -1 ? color.red : color.gray, text_size=size.small)
+    table.cell(info_table, 2, 4, str.tostring(vwap_confidence, "#.##"), text_color=color.black, text_size=size.small)
+
+    table.cell(info_table, 0, 5, "CONSENSUS", text_color=color.black, text_size=size.small)
+    table.cell(info_table, 1, 5, consensus_action == 1 ? "BUY" : consensus_action == -1 ? "SELL" : "HOLD",
+               text_color=consensus_action == 1 ? color.green : consensus_action == -1 ? color.red : color.gray, text_size=size.small)
+    table.cell(info_table, 2, 5, str.tostring(consensus_confidence, "#.##"), text_color=color.black, text_size=size.small)
+
+    table.cell(info_table, 0, 6, "Volatility", text_color=color.black, text_size=size.small)
+    table.cell(info_table, 1, 6, is_high_volatility ? "HIGH" : "NORMAL",
+               text_color=is_high_volatility ? color.red : color.green, text_size=size.small)
+    table.cell(info_table, 2, 6, str.tostring(volatility, "#.###"), text_color=color.black, text_size=size.small)
+
+    table.cell(info_table, 0, 7, "Votes", text_color=color.black, text_size=size.small)
+    table.cell(info_table, 1, 7, "B:" + str.tostring(buy_votes) + " S:" + str.tostring(sell_votes), text_color=color.black, text_size=size.small)
+    table.cell(info_table, 2, 7, str.tostring(min_confidence, "#.##"), text_color=color.black, text_size=size.small)
+
+// =============================================================================
+// ALERTS
+// =============================================================================
+
+alertcondition(should_buy, "Multi-Strategy Buy Signal", "Buy-the-Dip opportunity detected!")
+alertcondition(should_sell, "Multi-Strategy Sell Signal", "Sell-the-Peak opportunity detected!")
+alertcondition(strong_uptrend, "Strong Uptrend", "Strong uptrend detected - Peak selling opportunity!")
+alertcondition(strong_downtrend, "Strong Downtrend", "Strong downtrend detected - Dip buying opportunity!")
