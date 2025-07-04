@@ -54,7 +54,7 @@ class PerformanceTracker:
         """Save performance data to file"""
         try:
             with open(self.performance_file, 'w') as f:
-                json.dump(self.data, f, indent=2)
+                json.dump(self.data, f, indent=2, default=str)
         except Exception as e:
             print(f"Error saving performance data: {e}")
 

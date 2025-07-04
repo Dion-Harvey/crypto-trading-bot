@@ -8,9 +8,9 @@
     "limit_order_timeout_seconds": 20,
     "trade_cooldown_seconds": 300,
     "position_sizing_mode": "percentage",
-    "base_position_pct": 0.15,
-    "min_position_pct": 0.08,
-    "max_position_pct": 0.5
+    "base_position_pct": 0.30,
+    "min_position_pct": 0.16,
+    "max_position_pct": 0.50
   },
   "risk_management": {
     "stop_loss_pct": 0.025,

@@ -37,7 +37,7 @@ def calculate_daily_pnl():
     return pnl
 
 def generate_performance_report():
-    """Generate comprehensive CSV performance report"""
+    """Generate comprehensive CSV performance report - appends to same file"""
     if not os.path.exists(LOG_FILE):
         print("⚠️ No trade log found. Cannot generate report.")
         return
@@ -48,11 +48,27 @@ def generate_performance_report():
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         df['date'] = df['timestamp'].dt.date
 
-        # Calculate daily statistics
+        # Performance report filename (same file every time)
+        report_filename = "performance_report.csv"
+        
+        # Check if performance report exists to get existing data
+        existing_dates = set()
+        if os.path.exists(report_filename):
+            try:
+                existing_df = pd.read_csv(report_filename)
+                existing_dates = set(pd.to_datetime(existing_df['date']).dt.date)
+            except:
+                pass  # If file is corrupted, start fresh
+
+        # Calculate daily statistics for new dates only
         daily_stats = []
         dates = df['date'].unique()
 
         for date in dates:
+            # Skip if this date is already in the report
+            if date in existing_dates:
+                continue
+                
             day_trades = df[df['date'] == date]
             buys = day_trades[day_trades['action'] == 'BUY']
             sells = day_trades[day_trades['action'] == 'SELL']
@@ -79,32 +95,43 @@ def generate_performance_report():
                 'total_volume': round(day_trades['amount'].sum(), 6)
             })
 
-        # Create performance report CSV
-        report_filename = f"performance_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        # Append new data to performance report CSV
+        if daily_stats:
+            file_exists = os.path.exists(report_filename)
+            with open(report_filename, 'a', newline='') as file:
+                writer = csv.DictWriter(file, fieldnames=[
+                    'date', 'total_trades', 'buy_trades', 'sell_trades',
+                    'daily_pnl', 'avg_buy_price', 'avg_sell_price', 'total_volume'
+                ])
+                
+                # Write header only if file doesn't exist
+                if not file_exists:
+                    writer.writeheader()
+                    
+                writer.writerows(daily_stats)
+                
+            print(f"📊 Added {len(daily_stats)} new daily records to {report_filename}")
+        else:
+            print(f"📊 No new data to add to {report_filename}")
 
-        with open(report_filename, 'w', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=[
-                'date', 'total_trades', 'buy_trades', 'sell_trades',
-                'daily_pnl', 'avg_buy_price', 'avg_sell_price', 'total_volume'
-            ])
-            writer.writeheader()
-            writer.writerows(daily_stats)
+        # Read full report for summary statistics
+        if os.path.exists(report_filename):
+            full_df = pd.read_csv(report_filename)
+            total_pnl = full_df['daily_pnl'].sum()
+            total_trades = full_df['total_trades'].sum()
+            profitable_days = len(full_df[full_df['daily_pnl'] > 0])
+            total_days = len(full_df)
 
-        # Calculate overall statistics
-        total_pnl = sum([stat['daily_pnl'] for stat in daily_stats])
-        total_trades = sum([stat['total_trades'] for stat in daily_stats])
-        profitable_days = len([stat for stat in daily_stats if stat['daily_pnl'] > 0])
-
-        # Print summary
-        print(f"\n📊 PERFORMANCE REPORT GENERATED: {report_filename}")
-        print("="*60)
-        print(f"📅 Trading Period: {min(dates)} to {max(dates)}")
-        print(f"📈 Total P&L: ${total_pnl:.2f}")
-        print(f"🔄 Total Trades: {total_trades}")
-        print(f"✅ Profitable Days: {profitable_days}/{len(daily_stats)}")
-        print(f"📊 Win Rate: {(profitable_days/len(daily_stats)*100):.1f}%")
-        print(f"💰 Avg Daily P&L: ${(total_pnl/len(daily_stats)):.2f}")
-        print("="*60)
+            # Print summary
+            print(f"\n📊 PERFORMANCE REPORT UPDATED: {report_filename}")
+            print("="*60)
+            print(f"📅 Trading Period: {full_df['date'].min()} to {full_df['date'].max()}")
+            print(f"📈 Total P&L: ${total_pnl:.2f}")
+            print(f"🔄 Total Trades: {total_trades}")
+            print(f"✅ Profitable Days: {profitable_days}/{total_days}")
+            print(f"📊 Win Rate: {(profitable_days/total_days*100):.1f}%")
+            print(f"💰 Avg Daily P&L: ${(total_pnl/total_days):.2f}")
+            print("="*60)
 
         return report_filename
 
@@ -113,7 +140,7 @@ def generate_performance_report():
         return None
 
 def generate_trade_analysis():
-    """Generate detailed trade analysis CSV"""
+    """Generate detailed trade analysis CSV - appends to same file"""
     if not os.path.exists(LOG_FILE):
         print("⚠️ No trade log found. Cannot generate analysis.")
         return
@@ -121,6 +148,21 @@ def generate_trade_analysis():
     try:
         df = pd.read_csv(LOG_FILE)
         df['timestamp'] = pd.to_datetime(df['timestamp'])
+        
+        # Trade analysis filename (same file every time)
+        analysis_filename = "trade_analysis.csv"
+        
+        # Check existing trade pairs to avoid duplicates
+        existing_pairs = set()
+        if os.path.exists(analysis_filename):
+            try:
+                existing_df = pd.read_csv(analysis_filename)
+                # Create unique identifier for each trade pair
+                for _, row in existing_df.iterrows():
+                    pair_id = f"{row['buy_time']}_{row['sell_time']}"
+                    existing_pairs.add(pair_id)
+            except:
+                pass  # If file is corrupted, start fresh
 
         # Pair buy/sell trades for analysis
         trade_pairs = []
@@ -131,6 +173,13 @@ def generate_trade_analysis():
                 buy_queue.append(trade)
             elif trade['action'] == 'SELL' and buy_queue:
                 buy_trade = buy_queue.pop(0)  # FIFO
+
+                # Create unique identifier for this pair
+                pair_id = f"{buy_trade['timestamp']}_{trade['timestamp']}"
+                
+                # Skip if this pair already exists
+                if pair_id in existing_pairs:
+                    continue
 
                 profit = (trade['price'] - buy_trade['price']) * trade['amount']
                 hold_time = (trade['timestamp'] - buy_trade['timestamp']).total_seconds() / 60  # minutes
@@ -146,29 +195,45 @@ def generate_trade_analysis():
                     'return_pct': round((trade['price'] - buy_trade['price']) / buy_trade['price'] * 100, 2)
                 })
 
-        # Create trade analysis CSV
-        analysis_filename = f"trade_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-
-        with open(analysis_filename, 'w', newline='') as file:
-            if trade_pairs:
-                writer = csv.DictWriter(file, fieldnames=trade_pairs[0].keys())
-                writer.writeheader()
-                writer.writerows(trade_pairs)
-
-        # Print analysis summary
+        # Append new trade pairs to analysis CSV
         if trade_pairs:
-            winning_trades = [t for t in trade_pairs if t['profit_loss'] > 0]
-            avg_profit = sum([t['profit_loss'] for t in trade_pairs]) / len(trade_pairs)
-            avg_hold_time = sum([t['hold_time_minutes'] for t in trade_pairs]) / len(trade_pairs)
+            file_exists = os.path.exists(analysis_filename)
+            with open(analysis_filename, 'a', newline='') as file:
+                writer = csv.DictWriter(file, fieldnames=[
+                    'buy_time', 'sell_time', 'buy_price', 'sell_price', 'amount',
+                    'profit_loss', 'hold_time_minutes', 'return_pct'
+                ])
+                
+                # Write header only if file doesn't exist
+                if not file_exists:
+                    writer.writeheader()
+                    
+                writer.writerows(trade_pairs)
+                
+            print(f"🔍 Added {len(trade_pairs)} new trade pairs to {analysis_filename}")
+        else:
+            print(f"🔍 No new trade pairs to add to {analysis_filename}")
 
-            print(f"\n🔍 TRADE ANALYSIS GENERATED: {analysis_filename}")
-            print("="*60)
-            print(f"🎯 Completed Trade Pairs: {len(trade_pairs)}")
-            print(f"✅ Winning Trades: {len(winning_trades)}")
-            print(f"📊 Win Rate: {(len(winning_trades)/len(trade_pairs)*100):.1f}%")
-            print(f"💰 Average Profit: ${avg_profit:.2f}")
-            print(f"⏱️ Average Hold Time: {avg_hold_time:.1f} minutes")
-            print("="*60)
+        # Read full analysis for summary statistics
+        if os.path.exists(analysis_filename):
+            try:
+                full_df = pd.read_csv(analysis_filename)
+                if len(full_df) > 0:
+                    winning_trades = len(full_df[full_df['profit_loss'] > 0])
+                    avg_profit = full_df['profit_loss'].mean()
+                    avg_hold_time = full_df['hold_time_minutes'].mean()
+                    total_pairs = len(full_df)
+
+                    print(f"\n🔍 TRADE ANALYSIS UPDATED: {analysis_filename}")
+                    print("="*60)
+                    print(f"🎯 Total Trade Pairs: {total_pairs}")
+                    print(f"✅ Winning Trades: {winning_trades}")
+                    print(f"📊 Win Rate: {(winning_trades/total_pairs*100):.1f}%")
+                    print(f"💰 Average Profit: ${avg_profit:.2f}")
+                    print(f"⏱️ Average Hold Time: {avg_hold_time:.1f} minutes")
+                    print("="*60)
+            except Exception as e:
+                print(f"⚠️ Error reading full analysis file: {e}")
 
         return analysis_filename
 

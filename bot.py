@@ -8,6 +8,7 @@ import time
 import re
 import datetime
 import pandas as pd
+import traceback
 from config import BINANCE_API_KEY, BINANCE_API_SECRET
 from strategies.ma_crossover import fetch_ohlcv, MovingAverageCrossover
 from strategies.multi_strategy_optimized import MultiStrategyOptimized
@@ -53,8 +54,12 @@ stop_loss_percentage = risk_config['stop_loss_pct']
 take_profit_percentage = risk_config['take_profit_pct']
 max_drawdown_limit = risk_config['max_drawdown_pct']
 
-# Enhanced Risk Management - Initialize properly
-entry_price = None  # Track entry price for stop loss calculation (None when no position)
+# Enhanced Risk Management - Ensure proper initialization
+if entry_price is None:
+    entry_price = None
+    stop_loss_price = None
+    take_profit_price = None
+
 peak_balance = 20.0  # Track peak balance for drawdown calculation
 
 # Trade management from config
@@ -111,7 +116,7 @@ def sync_exchange_time():
                 exchange.options['timeDifference'] = offset
                 print(f"⚠️ Trying fallback offset: {offset}ms")
                 # Test the offset with a simple API call
-                exchange.fetch_ticker('BTC/USDT')
+                exchange.fetch_ticker('BTC/USDC')
                 print(f"✅ Offset {offset}ms works!")
                 return True
             except Exception as test_error:
@@ -304,7 +309,7 @@ def calculate_position_size(current_price, volatility, signal_confidence, total_
 
     # 7. VaR-based risk adjustment
     try:
-        returns = fetch_ohlcv(exchange, 'BTC/USDT', '1h', 100)['close'].pct_change().dropna()
+        returns = fetch_ohlcv(exchange, 'BTC/USDC', '1h', 100)['close'].pct_change().dropna()
         var_analysis = institutional_manager.var_calculator.calculate_var(returns, total_portfolio_value)
 
         if var_analysis['risk_assessment'] == 'HIGH':
@@ -329,6 +334,20 @@ def calculate_position_size(current_price, volatility, signal_confidence, total_
 
     # Apply bounds based on position sizing mode
     final_size = max(min_amount, min(max_amount, institutional_size))
+
+    # Ensure final size meets Binance minimum order requirement
+    BINANCE_MIN_ORDER_USD = 10.0
+    if final_size < BINANCE_MIN_ORDER_USD:
+        log_message(f"⚠️ Position size ${final_size:.2f} below Binance minimum ${BINANCE_MIN_ORDER_USD:.2f}")
+
+        # Only adjust if we have enough portfolio value
+        if total_portfolio_value >= BINANCE_MIN_ORDER_USD:
+            log_message(f"   Adjusting to minimum order size: ${BINANCE_MIN_ORDER_USD:.2f}")
+            final_size = BINANCE_MIN_ORDER_USD
+        else:
+            log_message(f"   ⚠️ Portfolio too small (${total_portfolio_value:.2f}) for minimum order")
+            log_message(f"   Skipping trade - need at least ${BINANCE_MIN_ORDER_USD:.2f}")
+            return 0  # Return 0 to skip the trade
 
     # Calculate position as percentage of portfolio for logging
     position_pct = (final_size / total_portfolio_value) * 100 if total_portfolio_value > 0 else 0
@@ -463,9 +482,9 @@ def place_intelligent_order(symbol, side, amount_usd, use_limit=True, timeout_se
         MIN_BTC_AMOUNT = 0.00001   # Minimum 0.00001 BTC
 
         if side.upper() == 'BUY':
-            available_usd = balance['USDT']['free']
+            available_usd = balance['USDC']['free']
             if available_usd < amount_usd:
-                print(f"❌ Insufficient USDT balance: ${available_usd:.2f} < ${amount_usd:.2f}")
+                print(f"❌ Insufficient USDC balance: ${available_usd:.2f} < ${amount_usd:.2f}")
                 return None
 
             # Use best bid for limit buy (slightly below market)
@@ -574,7 +593,7 @@ def place_intelligent_order(symbol, side, amount_usd, use_limit=True, timeout_se
 
         # Get updated balance for logging
         updated_balance = safe_api_call(exchange.fetch_balance)
-        total_balance = updated_balance['total']['USDT'] + (updated_balance['total']['BTC'] * final_price)
+        total_balance = updated_balance['total']['USDC'] + (updated_balance['total']['BTC'] * final_price)
 
         # Log the trade
         log_trade(side.upper(), symbol, amount, final_price, total_balance)
@@ -605,13 +624,13 @@ def place_market_order(symbol, side, amount_usd):
 def test_connection():
     try:
         balance = safe_api_call(exchange.fetch_balance)
-        ticker = safe_api_call(exchange.fetch_ticker, 'BTC/USDT')
+        ticker = safe_api_call(exchange.fetch_ticker, 'BTC/USDC')
         print("✅ Connected to Binance US!")
         print("Balances:")
         for coin, value in balance['total'].items():
             if value > 0:
                 print(f"{coin}: {value}")
-        print(f"\nCurrent BTC/USDT Price: ${ticker['last']}")
+        print(f"\nCurrent BTC/USDC Price: ${ticker['last']}")
 
         # Display current bot state
         state_manager.print_current_state()
@@ -637,12 +656,17 @@ def test_connection():
 
 def run_continuously(interval_seconds=60):
 
-    global holding_position, last_trade_time, consecutive_losses, active_trade_index, entry_price
+    global holding_position, last_trade_time, consecutive_losses, active_trade_index, entry_price, stop_loss_price, take_profit_price
 
     while True:
-        # Always ensure entry_price is initialized
+        # Always ensure risk management variables are initialized
         if 'entry_price' not in globals() or entry_price is None:
             entry_price = None
+        if 'stop_loss_price' not in globals() or stop_loss_price is None:
+            stop_loss_price = None
+        if 'take_profit_price' not in globals() or take_profit_price is None:
+            take_profit_price = None
+
         print("\n" + "="*50)
         print("RUNNING TRADING STRATEGY LOOP")
         print("="*50)
@@ -654,22 +678,19 @@ def run_continuously(interval_seconds=60):
 
         # Calculate dynamic daily loss limit based on current portfolio
         balance = safe_api_call(exchange.fetch_balance)
-        current_price = safe_api_call(exchange.fetch_ticker, 'BTC/USDT')['last']
-        total_portfolio_value = balance['total']['USDT'] + (balance['total']['BTC'] * current_price)
+        current_price = safe_api_call(exchange.fetch_ticker, 'BTC/USDC')['last']
+        total_portfolio_value = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
 
         dynamic_daily_loss_limit = calculate_dynamic_daily_loss_limit(total_portfolio_value)
 
-        # Enhanced risk management with dynamic limits
+        # Enhanced risk management with dynamic limits (logging only)
         if daily_pnl <= -dynamic_daily_loss_limit:
-            print(f"🚨 Daily loss limit reached (${daily_pnl:.2f} <= -${dynamic_daily_loss_limit:.2f}). Pausing trading for the day.")
-            time.sleep(3600)  # sleep for 1 hour
-            continue
+            print(f"⚠️ Daily loss alert: ${daily_pnl:.2f} exceeds limit -${dynamic_daily_loss_limit:.2f} (continuing trading as requested)")
 
         if consecutive_losses >= max_consecutive_losses:
-            print(f"⚠️ {consecutive_losses} consecutive losses detected. Cooling down for 15 minutes.")
-            time.sleep(900)  # 15 minute cooldown
-            consecutive_losses = 0  # Reset after cooldown
-            continue
+            print(f"⚠️ {consecutive_losses} consecutive losses detected (continuing trading as requested)")
+            # Reset consecutive losses to avoid spam alerts
+            consecutive_losses = 0
 
         # Check trade timing to avoid overtrading
         time_since_last_trade = time.time() - last_trade_time
@@ -680,7 +701,7 @@ def run_continuously(interval_seconds=60):
             continue
 
         try:
-            df = fetch_ohlcv(exchange, 'BTC/USDT', '1m', 50)
+            df = fetch_ohlcv(exchange, 'BTC/USDC', '1m', 50)
 
             # Monitor exchange-side orders with safe API calls
             open_orders = monitor_exchange_orders()
@@ -718,7 +739,7 @@ def run_continuously(interval_seconds=60):
             adaptive_signal = hybrid_strategy.get_adaptive_signal(df)
 
             # Get institutional-grade signal analysis
-            total_balance = balance['total']['USDT'] + (balance['total']['BTC'] * current_price)
+            total_balance = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
             institutional_signal = institutional_manager.get_institutional_signal(
                 df, portfolio_value=total_balance, base_position_size=optimized_config['trading']['base_amount_usd']
             )
@@ -736,7 +757,7 @@ def run_continuously(interval_seconds=60):
             # Check risk management (stop loss, take profit, max drawdown)
 
             if holding_position:
-                total_balance = balance['total']['USDT'] + (balance['total']['BTC'] * current_price)
+                total_balance = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
 
                 risk_action = check_risk_management(current_price, total_balance)
 
@@ -746,7 +767,7 @@ def run_continuously(interval_seconds=60):
                     # Execute exit trade
                     btc_amount = balance['BTC']['free']
                     if btc_amount > 0:
-                        order = safe_api_call(exchange.create_market_order, 'BTC/USDT', 'sell', btc_amount)
+                        order = safe_api_call(exchange.create_market_order, 'BTC/USDC', 'sell', btc_amount)
 
                         # Update consecutive losses for stop loss
                         if risk_action in ['STOP_LOSS', 'EMERGENCY_EXIT']:
@@ -769,7 +790,7 @@ def run_continuously(interval_seconds=60):
 
                         # Log the trade
                         updated_balance = safe_api_call(exchange.fetch_balance)
-                        log_trade("SELL", "BTC/USDT", btc_amount, current_price, updated_balance['USDT']['free'])
+                        log_trade("SELL", "BTC/USDC", btc_amount, current_price, updated_balance['USDC']['free'])
 
                         # Update performance tracking
                         if active_trade_index is not None:
@@ -798,7 +819,6 @@ def run_continuously(interval_seconds=60):
                         display_institutional_analysis_safe(inst)
                     except Exception as inst_display_error:
                         print(f"   [Error] Institutional analysis display failed: {inst_display_error}")
-                        import traceback
                         traceback.print_exc()
 
                 # Show fusion details
@@ -813,7 +833,6 @@ def run_continuously(interval_seconds=60):
                             print(f"      {name}: {vote_info.get('action', 'N/A')} ({vote_info.get('confidence', 0.0):.2f})")
                     except Exception as fusion_error:
                         print(f"   [Error] Fusion info display failed: {fusion_error}")
-                        import traceback
                         traceback.print_exc()
 
                 # Show vote counts if available
@@ -850,7 +869,6 @@ def run_continuously(interval_seconds=60):
 
             except Exception as display_block_error:
                 print(f"❌ Error in trading loop display block: {display_block_error}")
-                import traceback
                 traceback.print_exc()
 
             # Enhanced confidence thresholds with market conditions
@@ -914,14 +932,15 @@ def run_continuously(interval_seconds=60):
                     else:
                         # Calculate dynamic position size with institutional methods
                         volatility = signal.get('market_conditions', {}).get('volatility', 0.02)
-                        total_balance = balance['total']['USDT'] + (balance['total']['BTC'] * current_price)
+                        total_balance = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
 
                         # Use institutional position sizing if available
                         if 'institutional_analysis' in signal:
                             inst_analysis = signal['institutional_analysis']
                             kelly_size = inst_analysis.get('kelly_position_size', 0)
                             if kelly_size > 0:
-                                position_size = max(8, min(25, kelly_size))  # Safety bounds
+                                # Ensure institutional Kelly size meets minimum
+                                position_size = max(10, min(25, kelly_size))  # $10 minimum, $25 max
                                 log_message(f"💼 Using institutional Kelly position size: ${position_size:.2f}")
                             else:
                                 position_size = calculate_position_size(
@@ -938,6 +957,11 @@ def run_continuously(interval_seconds=60):
                                 total_balance
                             )
 
+                        # Check if position size is valid (0 means skip trade)
+                        if position_size <= 0:
+                            print(f"⚠️ Position size too small (${position_size:.2f}), skipping trade")
+                            continue
+
                         # Record trade signal for performance tracking
                         trade_index = performance_tracker.record_trade_signal(signal, signal.get('market_conditions', {}))
 
@@ -953,14 +977,14 @@ def run_continuously(interval_seconds=60):
                             print(f"   🏛️ Regime: {regime_name}, Risk: {signal.get('risk_score', 'UNKNOWN')}")
                             print(f"   📊 ML Confidence: {ml_conf:.2f}, VaR: ${var_daily:.2f}")
 
-                        order = place_intelligent_order('BTC/USDT', 'buy', amount_usd=position_size, use_limit=True)
+                        order = place_intelligent_order('BTC/USDC', 'buy', amount_usd=position_size, use_limit=True)
                         if order:
                             holding_position = True
                             active_trade_index = trade_index
                             performance_tracker.update_trade_outcome(trade_index, current_price)
 
                             # Place advanced risk management orders (entry_price is set in place_intelligent_order)
-                            risk_order = place_advanced_risk_orders('BTC/USDT', entry_price, order.get('amount', 0))
+                            risk_order = place_advanced_risk_orders('BTC/USDC', entry_price, order.get('amount', 0))
 
                             # Save trade state persistently
                             state_manager.enter_trade(
@@ -968,8 +992,7 @@ def run_continuously(interval_seconds=60):
                                 stop_loss_price=stop_loss_price,
                                 take_profit_price=take_profit_price,
                                 trade_id=order.get('id'),
-                                active_trade_index=trade_index,
-                                risk_order_id=risk_order.get('id') if risk_order else None
+                                active_trade_index=trade_index
                             )
 
             elif signal['action'] == 'SELL' and holding_position and signal['confidence'] >= min_confidence:
@@ -982,9 +1005,9 @@ def run_continuously(interval_seconds=60):
                     balance = safe_api_call(exchange.fetch_balance)
                     btc_amount = balance['BTC']['free']
                     if btc_amount > 0:
-                        ticker = safe_api_call(exchange.fetch_ticker, 'BTC/USDT')
+                        ticker = safe_api_call(exchange.fetch_ticker, 'BTC/USDC')
                         price = ticker['last']
-                        order = place_intelligent_order('BTC/USDT', 'sell', amount_usd=0, use_limit=True)
+                        order = place_intelligent_order('BTC/USDC', 'sell', amount_usd=0, use_limit=True)
 
                         # Only continue if order was successfully placed
                         if order is not None:
@@ -1027,9 +1050,9 @@ def run_continuously(interval_seconds=60):
 # =============================================================================
 
 def generate_reports():
-    """Generate comprehensive trading reports"""
+    """Generate comprehensive trading reports - updates existing files"""
     print("\n" + "="*60)
-    print("📊 GENERATING COMPREHENSIVE TRADING REPORTS")
+    print("📊 UPDATING COMPREHENSIVE TRADING REPORTS")
     print("="*60)
 
     # Generate performance report
@@ -1041,8 +1064,8 @@ def generate_reports():
     # Generate strategy performance analytics
     performance_tracker.print_performance_summary()
 
-    print("\n✅ Report generation complete!")
-    print("📁 Check your bot directory for the generated CSV files.")
+    print("\n✅ Report update complete!")
+    print("📁 Check performance_report.csv and trade_analysis.csv for updated data.")
     return perf_report, analysis_report
 
 # =============================================================================
@@ -1278,7 +1301,6 @@ def display_institutional_analysis_safe(inst_data):
                 print(f"   Regime Strategy: {regime_rec}")
         except Exception as regime_error:
             print(f"   Market Regime: Error ({regime_error})")
-            import traceback
             traceback.print_exc()
 
         # Other institutional metrics with safe access
