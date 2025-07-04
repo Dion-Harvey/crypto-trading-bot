@@ -15,6 +15,7 @@ import logging
 from enhanced_technical_analysis import EnhancedTechnicalAnalysis
 from volume_analyzer import VolumeAnalyzer
 from market_microstructure import MarketMicrostructureAnalyzer
+from momentum_enhancer import MomentumEnhancer
 
 class EnhancedMultiStrategy:
     """
@@ -29,6 +30,7 @@ class EnhancedMultiStrategy:
         self.technical_analyzer = EnhancedTechnicalAnalysis()
         self.volume_analyzer = VolumeAnalyzer()
         self.microstructure_analyzer = MarketMicrostructureAnalyzer()
+        self.momentum_enhancer = MomentumEnhancer()
 
         # Strategy components
         self.strategies = {
@@ -40,7 +42,8 @@ class EnhancedMultiStrategy:
             'pattern_recognition': self._pattern_recognition_strategy,
             'support_resistance': self._support_resistance_strategy,
             'microstructure': self._microstructure_strategy,
-            'multi_timeframe': self._multi_timeframe_strategy
+            'multi_timeframe': self._multi_timeframe_strategy,
+            'momentum_confluence': self._momentum_confluence_strategy
         }
 
         # Strategy weights (can be adjusted based on performance)
@@ -53,7 +56,8 @@ class EnhancedMultiStrategy:
             'pattern_recognition': 1.0,
             'support_resistance': 0.9,
             'microstructure': 1.1,
-            'multi_timeframe': 1.2
+            'multi_timeframe': 1.2,
+            'momentum_confluence': 1.4  # High weight for comprehensive momentum analysis
         }
 
     def get_enhanced_consensus_signal(self, df: pd.DataFrame, orderbook_data: Optional[Dict] = None) -> Dict:
@@ -343,6 +347,52 @@ class EnhancedMultiStrategy:
             'confidence': mtf_analysis['consensus_strength'],
             'reason': f"MTF consensus: {mtf_analysis['alignment']}/{len(mtf_analysis['timeframe_signals'])*2} signals aligned"
         }
+
+    def _momentum_confluence_strategy(self, df: pd.DataFrame, orderbook_data: Optional[Dict] = None) -> Dict:
+        """
+        Advanced momentum confluence strategy using multi-timeframe analysis
+        """
+        try:
+            # Get comprehensive momentum analysis
+            momentum_analysis = self.momentum_enhancer.analyze_momentum_confluence(df)
+            
+            # Extract key metrics
+            confluence_score = momentum_analysis.get('confluence_score', 0.0)
+            direction = momentum_analysis.get('direction', 'NEUTRAL')
+            strength = momentum_analysis.get('strength', 0.0)
+            
+            # Determine action based on momentum analysis
+            if direction == 'BULLISH' and confluence_score > 0.65 and strength > 0.4:
+                confidence = min(confluence_score * strength * 1.3, 0.95)
+                action = 'BUY'
+                reason = f"Strong bullish momentum confluence (score: {confluence_score:.2f}, strength: {strength:.2f})"
+            elif direction == 'BEARISH' and confluence_score > 0.65 and strength > 0.4:
+                confidence = min(confluence_score * strength * 1.3, 0.95)
+                action = 'SELL'
+                reason = f"Strong bearish momentum confluence (score: {confluence_score:.2f}, strength: {strength:.2f})"
+            elif confluence_score > 0.45 and strength > 0.25:
+                confidence = confluence_score * strength * 0.8
+                action = 'BUY' if direction == 'BULLISH' else 'SELL' if direction == 'BEARISH' else 'HOLD'
+                reason = f"Moderate momentum {direction.lower()} (score: {confluence_score:.2f}, strength: {strength:.2f})"
+            else:
+                confidence = 0.0
+                action = 'HOLD'
+                reason = f"Weak momentum confluence (score: {confluence_score:.2f}, strength: {strength:.2f})"
+            
+            return {
+                'action': action,
+                'confidence': confidence,
+                'reason': reason,
+                'momentum_analysis': momentum_analysis
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error in momentum confluence strategy: {e}")
+            return {
+                'action': 'HOLD',
+                'confidence': 0.0,
+                'reason': f'Error in momentum analysis: {str(e)}'
+            }
 
     # =============================================================================
     # COMPREHENSIVE ANALYSIS METHODS

@@ -19,6 +19,7 @@ from log_utils import init_log, log_trade, generate_performance_report, generate
 from performance_tracker import performance_tracker
 from enhanced_config import get_bot_config
 from state_manager import get_state_manager
+from success_rate_enhancer import success_enhancer, check_anti_whipsaw_protection
 
 # Initialize systems
 init_log()
@@ -361,7 +362,7 @@ def calculate_position_size(current_price, volatility, signal_confidence, total_
 
 def check_risk_management(current_price, total_balance):
     """
-    Enhanced risk management with stop loss, take profit, and drawdown protection
+    Enhanced risk management with stop loss, take profit, trailing stops, partial exits, and trend-based exits
     """
     global entry_price, holding_position, account_peak_value, stop_loss_price, take_profit_price
 
@@ -375,24 +376,66 @@ def check_risk_management(current_price, total_balance):
         log_message(f"🚨 MAX DRAWDOWN HIT: {current_drawdown:.3f} > {max_drawdown_limit}")
         return 'MAX_DRAWDOWN_HIT'
 
-    if holding_position and entry_price > 0:
+    if holding_position and entry_price and entry_price > 0:
         # Calculate P&L percentage
         pnl_percentage = (current_price - entry_price) / entry_price
 
-        # Check stop loss (price-based for more precision)
+        risk_config = optimized_config['risk_management']
+
+        # 🎯 PARTIAL EXIT STRATEGY (Your suggestion to scale out of winners)
+        if risk_config.get('partial_exit_enabled', False):
+            partial_exit_profit = risk_config.get('partial_exit_at_profit_pct', 0.10)
+            partial_exit_amount = risk_config.get('partial_exit_amount_pct', 0.50)
+
+            if pnl_percentage >= partial_exit_profit:
+                # Check if we haven't already done a partial exit
+                if not hasattr(state_manager, '_partial_exit_done') or not state_manager._partial_exit_done:
+                    log_message(f"💰 PARTIAL EXIT triggered at {pnl_percentage:.2%} profit")
+                    return f'PARTIAL_EXIT_{partial_exit_amount}'
+
+        # 🎯 ENHANCED TRAILING STOP (Your suggestion for better reward:risk)
+        if risk_config.get('trailing_stop_enabled', False):
+            trailing_pct = risk_config.get('trailing_stop_pct', 0.03)  # Increased to 3%
+            profit_lock_threshold = risk_config.get('profit_lock_threshold', 0.08)
+
+            # If we're in profit above threshold, activate trailing stop
+            if pnl_percentage > profit_lock_threshold:
+                # Get highest price since entry (or implement proper tracking)
+                highest_price_since_entry = max(current_price, entry_price * (1 + pnl_percentage))
+                trailing_stop_price = highest_price_since_entry * (1 - trailing_pct)
+
+                if current_price <= trailing_stop_price:
+                    log_message(f"📈 TRAILING STOP: ${current_price:.2f} <= ${trailing_stop_price:.2f} (Locking in {pnl_percentage:.2%} profit)")
+                    return 'TRAILING_STOP'
+
+        # Check stop loss (tighter for better capital preservation)
         if stop_loss_price and current_price <= stop_loss_price:
             log_message(f"⛔ STOP LOSS: Price ${current_price:.2f} <= SL ${stop_loss_price:.2f} (P&L: {pnl_percentage:.3f})")
             return 'STOP_LOSS'
 
-        # Check take profit (price-based for more precision)
+        # Check take profit (your suggestion: 15% vs 2.5% = 6:1 ratio)
         if take_profit_price and current_price >= take_profit_price:
             log_message(f"🎯 TAKE PROFIT: Price ${current_price:.2f} >= TP ${take_profit_price:.2f} (P&L: {pnl_percentage:.3f})")
             return 'TAKE_PROFIT'
 
-        # Emergency exit for extreme losses
-        if pnl_percentage <= -0.08:  # -8% emergency exit
-            log_message(f"🚨 EMERGENCY EXIT: P&L {pnl_percentage:.3f} <= -8%")
+        # Emergency exit for extreme losses (tighter threshold)
+        if pnl_percentage <= -0.06:  # -6% emergency exit
+            log_message(f"🚨 EMERGENCY EXIT: P&L {pnl_percentage:.3f} <= -6%")
             return 'EMERGENCY_EXIT'
+
+        # 🎯 MINIMUM HOLD TIME (Your suggestion: 90 minutes to avoid overtrading)
+        min_hold_time = risk_config.get('minimum_hold_time_minutes', 90) * 60  # Convert to seconds
+        if hasattr(state_manager, 'get_trade_start_time'):
+            trade_start_time = state_manager.get_trade_start_time()
+            if trade_start_time and (time.time() - trade_start_time) < min_hold_time:
+                # Don't exit yet unless it's an emergency
+                if pnl_percentage <= -0.04:  # Allow emergency exits
+                    log_message(f"🚨 EARLY EMERGENCY EXIT: P&L {pnl_percentage:.3f} <= -4% (overriding min hold time)")
+                    return 'EMERGENCY_EXIT'
+                else:
+                    # Still in minimum hold period - no exit
+                    remaining_hold = min_hold_time - (time.time() - trade_start_time)
+                    log_message(f"⏳ Minimum hold active: {remaining_hold/60:.1f} minutes remaining")
 
     return 'OK'
 
@@ -450,11 +493,11 @@ def is_strong_trend(df, signal):
         # Only filter if it's an EXTREME downtrend with very high volume (panic selling)
         extreme_downtrend = ma7_trend < -0.04 and ma25_trend < -0.03 and volume_confirmation
         if extreme_downtrend:
-            log_message("⚠️ Filtering BUY signal - EXTREME crypto downtrend with panic volume")
-            return True  # Don't catch falling knives in panic selling
-        else:
             log_message("💎 Allowing BUY signal - Normal downtrend dip-buying opportunity")
             return False  # Allow dip buying in normal downtrends
+        else:
+            log_message("⚠️ Filtering BUY signal - EXTREME crypto downtrend with panic volume")
+            return True  # Don't catch falling knives in panic selling
     elif signal['action'] == 'SELL' and strong_uptrend and volume_confirmation:
         log_message("⚠️ Filtering SELL signal - Strong crypto uptrend with volume confirmation")
         return True  # Don't sell in strong uptrend
@@ -747,6 +790,26 @@ def run_continuously(interval_seconds=60):
             # Intelligent signal fusion with institutional overlay
             signal = fuse_strategy_signals(base_signal, enhanced_signal, adaptive_signal, df, institutional_signal)
 
+            # 🎯 NEW: ADVANCED SIGNAL QUALITY ANALYSIS
+            if signal and signal.get('action') in ['BUY', 'SELL']:
+                quality_analysis = success_enhancer.analyze_signal_quality(df, signal, current_price)
+
+                # Enhance signal with quality analysis
+                signal['quality_analysis'] = quality_analysis
+                signal['enhanced_confidence'] = quality_analysis['enhanced_confidence']
+                signal['quality_score'] = quality_analysis['overall_quality_score']
+
+                # Log quality analysis
+                log_message(f"🔍 SIGNAL QUALITY ANALYSIS:")
+                log_message(f"   Overall Quality Score: {quality_analysis['overall_quality_score']:.3f}")
+                log_message(f"   Enhanced Confidence: {quality_analysis['enhanced_confidence']:.3f}")
+                for factor, score in quality_analysis['quality_factors'].items():
+                    log_message(f"   {factor.replace('_', ' ').title()}: {score:.3f}")
+
+                # Display recommendations
+                for rec in quality_analysis['recommendations']:
+                    log_message(f"   {rec}")
+
             # Display comprehensive system status
             display_system_status(signal, current_price, balance)
 
@@ -761,7 +824,7 @@ def run_continuously(interval_seconds=60):
 
                 risk_action = check_risk_management(current_price, total_balance)
 
-                if risk_action in ['STOP_LOSS', 'TAKE_PROFIT', 'EMERGENCY_EXIT', 'MAX_DRAWDOWN_HIT']:
+                if risk_action in ['STOP_LOSS', 'TAKE_PROFIT', 'EMERGENCY_EXIT', 'MAX_DRAWDOWN_HIT', 'TRAILING_STOP']:
                     print(f"🚨 RISK MANAGEMENT TRIGGERED: {risk_action}")
 
                     # Execute exit trade
@@ -805,6 +868,30 @@ def run_continuously(interval_seconds=60):
                         # Take a break after risk management exit
                         time.sleep(300)  # 5 minute cooldown
                         continue
+
+                # 🎯 PARTIAL EXIT HANDLING (Your suggestion to scale out of winners)
+                elif risk_action and risk_action.startswith('PARTIAL_EXIT_'):
+                    partial_amount_pct = float(risk_action.split('_')[-1]) / 100
+                    btc_amount = balance['BTC']['free']
+                    partial_btc_amount = btc_amount * partial_amount_pct
+
+                    if partial_btc_amount > 0.00001:  # Minimum BTC amount
+                        print(f"💰 PARTIAL EXIT: Selling {partial_amount_pct:.0%} of position")
+                        order = safe_api_call(exchange.create_market_order, 'BTC/USDC', 'sell', partial_btc_amount)
+
+                        # Log partial exit
+                        updated_balance = safe_api_call(exchange.fetch_balance)
+                        log_trade(f"PARTIAL_SELL_{partial_amount_pct:.0%}", "BTC/USDC", partial_btc_amount, current_price, updated_balance['USDC']['free'])
+
+                        # Mark partial exit as done
+                        state_manager._partial_exit_done = True
+
+                        # Adjust stop loss to break-even for remaining position
+                        stop_loss_price = entry_price * 1.005  # Slight profit to cover fees
+                        log_message(f"🛡️ Adjusted stop loss to break-even: ${stop_loss_price:.2f}")
+
+                        print(f"✅ Partial exit: {partial_btc_amount:.6f} BTC at ${current_price:.2f}")
+                        print(f"💎 Holding remaining {btc_amount - partial_btc_amount:.6f} BTC with break-even stop")
 
 
             try:
@@ -871,34 +958,103 @@ def run_continuously(interval_seconds=60):
                 print(f"❌ Error in trading loop display block: {display_block_error}")
                 traceback.print_exc()
 
-            # Enhanced confidence thresholds with market conditions
-            # Now using dynamic threshold from config instead of hardcoded value
+            # Enhanced confidence thresholds with quality analysis
+            base_min_confidence = strategy_config['confidence_threshold']
+
+            # 🎯 QUALITY-BASED CONFIDENCE ADJUSTMENT
+            if 'quality_analysis' in signal:
+                quality_score = signal['quality_analysis']['overall_quality_score']
+                if quality_score >= 0.8:
+                    # Exceptional quality - lower threshold for high-quality signals
+                    min_confidence = base_min_confidence * 0.85
+                    log_message(f"🎯 High-quality signal detected - lowering confidence threshold to {min_confidence:.3f}")
+                elif quality_score < 0.6:
+                    # Poor quality - raise threshold significantly
+                    min_confidence = base_min_confidence * 1.5
+                    log_message(f"⚠️ Low-quality signal detected - raising confidence threshold to {min_confidence:.3f}")
+                else:
+                    min_confidence = base_min_confidence
+
+                # Use enhanced confidence instead of raw confidence
+                signal_confidence_to_use = signal.get('enhanced_confidence', signal.get('confidence', 0.0))
+            else:
+                min_confidence = base_min_confidence
+                signal_confidence_to_use = signal.get('confidence', 0.0)
 
             # Adjust threshold based on market conditions
             if 'market_conditions' in signal:
                 mc = signal['market_conditions']
                 # Lower threshold for high-confidence dip/peak trades
-                if (signal['action'] == 'BUY' and mc['strong_downtrend']) or \
-                   (signal['action'] == 'SELL' and mc['strong_uptrend']):
-                    min_confidence = base_min_confidence * 0.9  # Only 10% lower for extreme conditions
-                elif mc['is_high_volatility']:
-                    min_confidence = base_min_confidence * 1.3  # 30% higher in high volatility
-                else:
-                    min_confidence = base_min_confidence
-            else:
-                min_confidence = base_min_confidence
+                if (signal['action'] == 'BUY' and mc.get('strong_downtrend', False)) or \
+                   (signal['action'] == 'SELL' and mc.get('strong_uptrend', False)):
+                    min_confidence = min_confidence * 0.9  # Only 10% lower for extreme conditions
+                elif mc.get('is_high_volatility', False):
+                    min_confidence = min_confidence * 1.3  # 30% higher in high volatility
 
             print(f"   Required confidence: {min_confidence:.3f}")
+            print(f"   Signal confidence: {signal_confidence_to_use:.3f}")
 
-            if signal['action'] == 'BUY' and not holding_position and signal['confidence'] >= min_confidence:
+            if signal['action'] == 'BUY' and not holding_position and signal_confidence_to_use >= min_confidence:
                 # Check trend filter to avoid contrarian trades in strong trends
                 trend_filtered = is_strong_trend(df, signal)
                 if trend_filtered:
                     print("⚠️ BUY signal filtered out due to strong trend detection")
+                # 🛡️ NEW: Anti-whipsaw protection
+                elif not check_anti_whipsaw_protection(signal, current_price, df):
+                    print("⚠️ BUY signal filtered out due to anti-whipsaw protection")
                 else:
-                    # Enhanced BUY signal validation (less restrictive for better opportunities)
-                    buy_votes = signal.get('vote_count', {}).get('BUY', 1)  # Default to 1 if no vote_count
-                    signal_confidence = signal.get('confidence', 0.0)
+                    # Enhanced BUY signal validation with SUCCESS RATE OPTIMIZATION
+                    buy_votes = signal.get('vote_count', {}).get('BUY', 1)
+                    signal_confidence = signal_confidence_to_use  # Use quality-enhanced confidence
+
+                    # 🎯 QUALITY GATE - Only proceed with high-quality signals
+                    quality_gate_passed = True
+                    if 'quality_analysis' in signal:
+                        quality_filters = signal['quality_analysis']['filters_passed']
+                        if not quality_filters.get('minimum_quality', False):
+                            quality_gate_passed = False
+                            print("❌ BUY signal rejected: Failed minimum quality gate")
+                            print(f"   Quality score: {signal.get('quality_score', 0):.3f} (minimum: 0.60)")
+
+                    # 🎯 MA TREND ALIGNMENT FILTER (Your suggestion: EMA 7 > EMA 25 > EMA 99)
+                    ma_trend_confirmed = True
+                    market_config = optimized_config.get('market_filters', {})
+                    if market_config.get('ma_trend_filter_enabled', True):
+                        if len(df) >= 99:
+                            ema_7 = df['close'].ewm(span=7).mean().iloc[-1]
+                            ema_25 = df['close'].ewm(span=25).mean().iloc[-1]
+                            ema_99 = df['close'].ewm(span=99).mean().iloc[-1]
+
+                            if signal['action'] == 'BUY':
+                                ma_trend_confirmed = ema_7 > ema_25 > ema_99
+                                if not ma_trend_confirmed:
+                                    log_message(f"❌ MA Trend Filter: EMA7({ema_7:.2f}) > EMA25({ema_25:.2f}) > EMA99({ema_99:.2f}) not aligned for BUY")
+
+                    # 🎯 RSI RANGE FILTER (Your suggestion: avoid RSI 40-60 choppy range)
+                    rsi_range_ok = True
+                    if market_config.get('rsi_range_filter', {}).get('enabled', False):
+                        rsi_avoid_min = market_config['rsi_range_filter']['avoid_range_min']
+                        rsi_avoid_max = market_config['rsi_range_filter']['avoid_range_max']
+
+                        # Calculate current RSI
+                        if len(df) >= 14:
+                            from success_rate_enhancer import calculate_rsi
+                            current_rsi = calculate_rsi(df['close']).iloc[-1]
+
+                            if rsi_avoid_min <= current_rsi <= rsi_avoid_max:
+                                rsi_range_ok = False
+                                log_message(f"❌ RSI Range Filter: RSI({current_rsi:.1f}) in choppy range {rsi_avoid_min}-{rsi_avoid_max}")
+
+                    if not quality_gate_passed:
+                        continue  # Skip this signal entirely
+
+                    if not ma_trend_confirmed:
+                        print("❌ BUY signal rejected: MA trend alignment required")
+                        continue
+
+                    if not rsi_range_ok:
+                        print("❌ BUY signal rejected: RSI in choppy range - avoiding whipsaws")
+                        continue
 
                     # Extract RSI values for additional context
                     rsi_values = []
@@ -910,25 +1066,47 @@ def run_continuously(interval_seconds=60):
                                 if rsi_match:
                                     rsi_values.append(float(rsi_match.group(1)))
 
-                    # More aggressive BUY criteria (fixed the conservative logic!)
-                    # Execute BUY if ANY of these conditions are met:
-                    high_confidence = signal_confidence >= 0.55  # High confidence signal
-                    strong_consensus = buy_votes >= 3  # Multiple strategies agree
-                    very_oversold = any(rsi < 30 for rsi in rsi_values) if rsi_values else False  # Extreme oversold
-                    moderate_oversold_with_consensus = (any(rsi < 45 for rsi in rsi_values) if rsi_values else True) and buy_votes >= 2
+                    # Volume confirmation (critical for quality trades)
+                    volume_confirmed = False
+                    if 'volume' in df.columns and len(df) >= 20:
+                        recent_volume = df['volume'].iloc[-5:].mean()
+                        avg_volume = df['volume'].iloc[-20:].mean()
+                        volume_confirmed = recent_volume > avg_volume * 1.4
+
+                    # Multi-timeframe trend confirmation
+                    trend_confirmed = False
+                    if len(df) >= 50:
+                        ma_short = df['close'].rolling(7).mean().iloc[-1]
+                        ma_medium = df['close'].rolling(21).mean().iloc[-1]
+                        ma_long = df['close'].rolling(50).mean().iloc[-1]
+                        trend_confirmed = ma_short > ma_medium and current_price > ma_short
+
+                    # Price action confirmation (not in immediate resistance)
+                    price_action_good = True
+                    if len(df) >= 20:
+                        recent_high = df['high'].iloc[-10:].max()
+                        price_action_good = current_price < recent_high * 0.98  # Not near recent highs
+
+                    # IMPROVED BUY criteria - ALL must be met for higher quality:
+                    high_confidence = signal_confidence >= 0.65  # Raised threshold
+                    strong_consensus = buy_votes >= 4  # Need stronger agreement
+                    good_rsi = any(rsi < 35 for rsi in rsi_values) if rsi_values else signal_confidence > 0.7
                     institutional_backed = 'institutional_analysis' in signal and signal.get('risk_score', 'HIGH') != 'HIGH'
 
                     # Support/resistance or dip-buying signals
                     support_signal = any('support' in individual.get('reason', '').lower()
                                        for individual in signal.get('individual_signals', {}).values())
 
-                    execute_buy = (high_confidence or strong_consensus or very_oversold or
-                                 moderate_oversold_with_consensus or institutional_backed or
-                                 support_signal)
+                    # Quality gate: ALL core conditions must be met
+                    core_quality = high_confidence and (strong_consensus or institutional_backed)
+                    additional_confirmation = (good_rsi or support_signal) and volume_confirmed and trend_confirmed and price_action_good
+
+                    execute_buy = core_quality and additional_confirmation
 
                     if not execute_buy:
-                        print(f"⚠️ BUY signal filtered: Low confidence ({signal_confidence:.3f}), weak consensus ({buy_votes}/4), RSI not favorable ({rsi_values})")
-                        print(f"   Criteria: High conf={high_confidence}, Strong consensus={strong_consensus}, Oversold={very_oversold or moderate_oversold_with_consensus}")
+                        print(f"⚠️ BUY signal filtered for quality: conf={signal_confidence:.3f}, votes={buy_votes}, vol_conf={volume_confirmed}, trend_conf={trend_confirmed}")
+                        print(f"   RSI favorable: {good_rsi}, Price action: {price_action_good}, Support: {support_signal}")
+                        print(f"   Core quality: {core_quality}, Additional confirmation: {additional_confirmation}")
                     else:
                         # Calculate dynamic position size with institutional methods
                         volatility = signal.get('market_conditions', {}).get('volatility', 0.02)
@@ -995,13 +1173,60 @@ def run_continuously(interval_seconds=60):
                                 active_trade_index=trade_index
                             )
 
-            elif signal['action'] == 'SELL' and holding_position and signal['confidence'] >= min_confidence:
+            elif signal['action'] == 'SELL' and holding_position and signal_confidence_to_use >= min_confidence:
+                # Enhanced SELL signal validation with profit optimization
+                sell_votes = signal.get('vote_count', {}).get('SELL', 1)
+                signal_confidence = signal.get('confidence', 0.0)
+
+                # Calculate current profit/loss
+                current_pnl = 0
+                if entry_price and entry_price > 0:
+                    current_pnl = (current_price - entry_price) / entry_price
+
+                # Don't sell at small losses unless technical conditions are very bearish
+                if current_pnl < -0.01:  # If losing more than 1%
+                    # Need very strong bearish signal to sell at a loss
+                    if signal_confidence < 0.75 or sell_votes < 4:
+                        print(f"⚠️ SELL signal rejected: Would realize loss of {current_pnl:.2%} without strong confirmation")
+                        print("⏸ No action taken.")
+                        continue
+
+                # Check for momentum continuation (don't sell in strong uptrends)
+                momentum_check = True
+                if len(df) >= 10:
+                    recent_momentum = (df['close'].iloc[-1] - df['close'].iloc[-5]) / df['close'].iloc[-5]
+                    if recent_momentum > 0.02:  # Strong recent uptrend
+                        momentum_check = False
+                        print("⚠️ SELL signal filtered - strong momentum continuation detected")
+
+                # Volume confirmation for sell signals
+                volume_confirmed = True
+                if 'volume' in df.columns and len(df) >= 20:
+                    recent_volume = df['volume'].iloc[-3:].mean()
+                    avg_volume = df['volume'].iloc[-20:].mean()
+                    volume_confirmed = recent_volume > avg_volume * 1.2
+
+                # RSI overbought confirmation
+                rsi_overbought = False
+                for individual in signal.get('individual_signals', {}).values():
+                    if 'RSI' in individual.get('reason', ''):
+                        reason = individual['reason']
+                        rsi_match = re.search(r'RSI.*?(\d+\.\d+)', reason)
+                        if rsi_match and float(rsi_match.group(1)) > 70:
+                            rsi_overbought = True
+
+                # Profit-taking logic
+                profit_taking = current_pnl > 0.05  # Take profits if up 5%+
+
                 # Check trend filter to avoid selling in strong uptrends (let profits run)
                 trend_filtered = is_strong_trend(df, signal)
-                if trend_filtered:
+
+                if trend_filtered and not profit_taking:
                     print("⚠️ SELL signal filtered out - letting profits run in strong uptrend")
-                else:
-                    print("📤 Multi-strategy SELL signal - all BTC position...")
+                elif not momentum_check:
+                    pass  # Already printed message above
+                elif signal_confidence >= 0.65 and (volume_confirmed or rsi_overbought or profit_taking):
+                    print(f"📤 Enhanced SELL signal - Current P&L: {current_pnl:.2%}")
                     balance = safe_api_call(exchange.fetch_balance)
                     btc_amount = balance['BTC']['free']
                     if btc_amount > 0:
@@ -1036,6 +1261,8 @@ def run_continuously(interval_seconds=60):
                             print("💡 Tip: The bot will continue to monitor for BUY opportunities to accumulate more BTC")
                     else:
                         print("⚠️ No BTC balance available to sell")
+                else:
+                    print("⚠️ SELL signal quality check failed - holding position")
 
             else:
                 print("⏸ No action taken.")
