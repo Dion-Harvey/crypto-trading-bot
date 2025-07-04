@@ -1,5 +1,6 @@
 # API Keys and Sensitive Data
 config.py
+config.json
 *.env
 .env*
 
