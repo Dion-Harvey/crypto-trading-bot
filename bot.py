@@ -995,6 +995,23 @@ def run_continuously(interval_seconds=60):
             print(f"   Signal confidence: {signal_confidence_to_use:.3f}")
 
             if signal['action'] == 'BUY' and not holding_position and signal_confidence_to_use >= min_confidence:
+                # Log detailed signal breakdown
+                print(f"\n🔍 ANALYZING BUY SIGNAL:")
+                print(f"   Final Confidence: {signal_confidence_to_use:.3f} (required: {min_confidence:.3f})")
+
+                # Show strategy breakdown
+                if 'fusion_info' in signal and 'all_signals' in signal['fusion_info']:
+                    print(f"   📊 Strategy Votes:")
+                    for strategy_name, vote_info in signal['fusion_info']['all_signals'].items():
+                        action = vote_info.get('action', 'N/A')
+                        confidence = vote_info.get('confidence', 0.0)
+                        print(f"      {strategy_name}: {action} ({confidence:.2f})")
+
+                # Show selection reasoning
+                if 'fusion_info' in signal:
+                    selection_reason = signal['fusion_info'].get('selection_reason', 'Unknown')
+                    print(f"   🧠 Selection: {selection_reason}")
+
                 # Check trend filter to avoid contrarian trades in strong trends
                 trend_filtered = is_strong_trend(df, signal)
                 if trend_filtered:
@@ -1087,9 +1104,11 @@ def run_continuously(interval_seconds=60):
                         recent_high = df['high'].iloc[-10:].max()
                         price_action_good = current_price < recent_high * 0.98  # Not near recent highs
 
-                    # IMPROVED BUY criteria - ALL must be met for higher quality:
-                    high_confidence = signal_confidence >= 0.65  # Raised threshold
-                    strong_consensus = buy_votes >= 4  # Need stronger agreement
+                    # INTELLIGENT BUY criteria - Adaptive thresholds based on signal quality
+                    high_confidence = signal_confidence >= 0.60  # Slightly relaxed from 0.65
+                    strong_consensus = buy_votes >= 2  # 2+ strategies agreeing is good
+                    exceptional_confidence = signal_confidence >= 0.80  # For truly exceptional signals
+
                     good_rsi = any(rsi < 35 for rsi in rsi_values) if rsi_values else signal_confidence > 0.7
                     institutional_backed = 'institutional_analysis' in signal and signal.get('risk_score', 'HIGH') != 'HIGH'
 
@@ -1097,16 +1116,55 @@ def run_continuously(interval_seconds=60):
                     support_signal = any('support' in individual.get('reason', '').lower()
                                        for individual in signal.get('individual_signals', {}).values())
 
-                    # Quality gate: ALL core conditions must be met
-                    core_quality = high_confidence and (strong_consensus or institutional_backed)
-                    additional_confirmation = (good_rsi or support_signal) and volume_confirmed and trend_confirmed and price_action_good
+                    # ADAPTIVE QUALITY GATES - Multiple paths to execution
 
-                    execute_buy = core_quality and additional_confirmation
+                    # Path 1: Exceptional signal (high confidence overrides most filters)
+                    exceptional_quality = exceptional_confidence and (strong_consensus or institutional_backed)
+
+                    # Path 2: Strong consensus with good conditions
+                    consensus_quality = (strong_consensus and high_confidence and
+                                       (volume_confirmed or trend_confirmed or good_rsi))
+
+                    # Path 3: Institutional backing with reasonable confidence
+                    institutional_quality = (institutional_backed and signal_confidence >= 0.65 and
+                                           (volume_confirmed or good_rsi))
+
+                    # Path 4: Technical setup quality (for lower consensus but good technicals)
+                    technical_quality = (high_confidence and (good_rsi or support_signal) and
+                                       volume_confirmed and trend_confirmed and price_action_good)
+
+                    # Execute if ANY quality path is met
+                    execute_buy = (exceptional_quality or consensus_quality or
+                                 institutional_quality or technical_quality)
 
                     if not execute_buy:
-                        print(f"⚠️ BUY signal filtered for quality: conf={signal_confidence:.3f}, votes={buy_votes}, vol_conf={volume_confirmed}, trend_conf={trend_confirmed}")
-                        print(f"   RSI favorable: {good_rsi}, Price action: {price_action_good}, Support: {support_signal}")
-                        print(f"   Core quality: {core_quality}, Additional confirmation: {additional_confirmation}")
+                        print(f"⚠️ BUY signal filtered - no quality path met:")
+                        print(f"   Signal: conf={signal_confidence:.3f}, votes={buy_votes}")
+                        print(f"   Exceptional: {exceptional_quality} (conf≥0.80 + consensus/institutional)")
+                        print(f"   Consensus: {consensus_quality} (2+ votes + conf≥0.60 + volume/trend/RSI)")
+                        print(f"   Institutional: {institutional_quality} (backed + conf≥0.65 + volume/RSI)")
+                        print(f"   Technical: {technical_quality} (conf≥0.60 + RSI/support + all confirmations)")
+                        print(f"   Confirmations: vol={volume_confirmed}, trend={trend_confirmed}, RSI={good_rsi}, price={price_action_good}")
+                    else:
+                        # Determine which quality path was taken for logging
+                        quality_path = "unknown"
+                        if exceptional_quality:
+                            quality_path = "exceptional"
+                        elif consensus_quality:
+                            quality_path = "consensus"
+                        elif institutional_quality:
+                            quality_path = "institutional"
+                        elif technical_quality:
+                            quality_path = "technical"
+
+                    if not execute_buy:
+                        print(f"⚠️ BUY signal filtered - no quality path met:")
+                        print(f"   Signal: conf={signal_confidence:.3f}, votes={buy_votes}")
+                        print(f"   Exceptional: {exceptional_quality} (conf≥0.80 + consensus/institutional)")
+                        print(f"   Consensus: {consensus_quality} (2+ votes + conf≥0.60 + volume/trend/RSI)")
+                        print(f"   Institutional: {institutional_quality} (backed + conf≥0.65 + volume/RSI)")
+                        print(f"   Technical: {technical_quality} (conf≥0.60 + RSI/support + all confirmations)")
+                        print(f"   Confirmations: vol={volume_confirmed}, trend={trend_confirmed}, RSI={good_rsi}, price={price_action_good}")
                     else:
                         # Calculate dynamic position size with institutional methods
                         volatility = signal.get('market_conditions', {}).get('volatility', 0.02)
@@ -1342,58 +1400,81 @@ def fuse_strategy_signals(base_signal, enhanced_signal, adaptive_signal, df, ins
     log_message(f"🔍 Market Context: Price=${current_price:.2f}, Vol={volatility:.4f}")
     log_message(f"   Adaptive Mode: {adaptive_mode}, Institutional Regime: {institutional_regime}")
 
-    # Strategy selection logic enhanced with institutional analysis
+    # Enhanced strategy selection logic with better signal prioritization
     selected_signal = None
     selection_reason = ""
 
-    # 1. Institutional signal takes priority if high confidence and regime-aligned
-    if (institutional_signal and institutional_signal.get('confidence', 0) > 0.7 and
-        institutional_signal.get('risk_score') != 'HIGH'):
+    # Count votes from all strategies first for better analysis
+    buy_votes = sum(1 for _, sig in signals if sig.get('action') == 'BUY')
+    sell_votes = sum(1 for _, sig in signals if sig.get('action') == 'SELL')
+    hold_votes = len(signals) - buy_votes - sell_votes
+
+    log_message(f"📊 Vote Tally: BUY={buy_votes}, SELL={sell_votes}, HOLD={hold_votes}")
+
+    # 1. Strong consensus BUY (2+ strategies with decent confidence)
+    if buy_votes >= 2:
+        buy_signals = [(name, sig) for name, sig in signals if sig.get('action') == 'BUY']
+        # Get the highest confidence BUY signal
+        best_buy_name, best_buy_signal = max(buy_signals, key=lambda x: x[1].get('confidence', 0))
+
+        # Enhanced BUY signal wins if confidence is decent (>0.6) even with institutional disagreement
+        if best_buy_signal.get('confidence', 0) > 0.6:
+            selected_signal = best_buy_signal
+            confidence_list = [f"{name}: {sig.get('confidence', 0):.2f}" for name, sig in buy_signals]
+            selection_reason = f"Strong BUY consensus ({buy_votes}/{len(signals)}) - Best: {best_buy_name} ({confidence_list})"
+            log_message(f"🎯 CONSENSUS BUY SELECTED: {best_buy_name} with {best_buy_signal.get('confidence', 0):.3f} confidence")
+        else:
+            # Weak BUY consensus - be more cautious
+            selected_signal = best_buy_signal
+            selected_signal['confidence'] *= 0.8  # Reduce confidence due to low values
+            selection_reason = f"Weak BUY consensus ({buy_votes}/{len(signals)}) - confidence adjusted down"
+
+    # 2. Strong consensus SELL (2+ strategies)
+    elif sell_votes >= 2:
+        sell_signals = [(name, sig) for name, sig in signals if sig.get('action') == 'SELL']
+        best_sell_name, best_sell_signal = max(sell_signals, key=lambda x: x[1].get('confidence', 0))
+        selected_signal = best_sell_signal
+        selection_reason = f"Strong SELL consensus ({sell_votes}/{len(signals)}) - Best: {best_sell_name}"
+
+    # 3. High confidence institutional signal (takes priority over single strategies)
+    elif (institutional_signal and institutional_signal.get('confidence', 0) > 0.7 and
+          institutional_signal.get('risk_score') != 'HIGH'):
         selected_signal = institutional_signal
-        selection_reason = f"High-confidence institutional signal (regime: {institutional_regime})"
+        selection_reason = f"High-confidence institutional override (regime: {institutional_regime})"
 
-    # 2. High confidence adaptive signal in trending markets
-    elif (adaptive_signal.get('confidence', 0) > 0.6 and
-          adaptive_mode in ['trend_following', 'mean_reversion']):
+    # 4. Single high-confidence adaptive signal in strong trending markets
+    elif (adaptive_signal.get('confidence', 0) > 0.65 and
+          adaptive_mode in ['trend_following', 'mean_reversion'] and
+          volatility > 0.02):  # More volatile = better for adaptive
         selected_signal = adaptive_signal
-        selection_reason = f"High-confidence adaptive signal in {adaptive_mode} mode"
+        selection_reason = f"High-confidence adaptive signal in {adaptive_mode} mode (vol: {volatility:.4f})"
 
-    # 3. Enhanced strategy in normal market conditions
-    elif enhanced_signal.get('confidence', 0) > 0.5 and volatility < 0.03:
+    # 5. Single high-confidence enhanced strategy in stable markets
+    elif (enhanced_signal.get('confidence', 0) > 0.7 and volatility < 0.025):
         selected_signal = enhanced_signal
-        selection_reason = "Enhanced strategy for stable market conditions"
+        selection_reason = f"High-confidence enhanced strategy in stable market (vol: {volatility:.4f})"
 
-    # 4. Base strategy as reliable fallback
+    # 6. Institutional signal with moderate confidence (backup)
+    elif (institutional_signal and institutional_signal.get('confidence', 0) > 0.5 and
+          institutional_signal.get('risk_score') == 'LOW'):
+        selected_signal = institutional_signal
+        selection_reason = f"Moderate institutional signal with low risk (regime: {institutional_regime})"
+
+    # 7. Base strategy as conservative fallback
     elif base_signal.get('confidence', 0) > 0.45:
         selected_signal = base_signal
-        selection_reason = "Base strategy as reliable fallback"
+        selection_reason = "Conservative base strategy fallback"
 
-    # 5. Consensus voting if no clear winner
+    # 8. Default to HOLD if nothing qualifies
     else:
-        # Count votes from all strategies
-        buy_votes = sum(1 for _, sig in signals if sig.get('action') == 'BUY')
-        sell_votes = sum(1 for _, sig in signals if sig.get('action') == 'SELL')
-
-        if buy_votes >= 2:
-            # Use the highest confidence BUY signal
-            buy_signals = [(name, sig) for name, sig in signals if sig.get('action') == 'BUY']
-            selected_signal = max(buy_signals, key=lambda x: x[1].get('confidence', 0))[1]
-            selection_reason = f"Consensus BUY ({buy_votes}/{len(signals)} strategies agree)"
-        elif sell_votes >= 2:
-            # Use the highest confidence SELL signal
-            sell_signals = [(name, sig) for name, sig in signals if sig.get('action') == 'SELL']
-            selected_signal = max(sell_signals, key=lambda x: x[1].get('confidence', 0))[1]
-            selection_reason = f"Consensus SELL ({sell_votes}/{len(signals)} strategies agree)"
-        else:
-            # Default to HOLD with enhanced structure
-            selected_signal = {
-                'action': 'HOLD',
-                'confidence': 0.3,
-                'reason': 'No clear consensus among strategies',
-                'vote_count': {'BUY': buy_votes, 'SELL': sell_votes, 'HOLD': len(signals) - buy_votes - sell_votes},
-                'individual_signals': {}
-            }
-            selection_reason = "No consensus - defaulting to HOLD"
+        selected_signal = {
+            'action': 'HOLD',
+            'confidence': 0.3,
+            'reason': 'No qualifying signals meet confidence thresholds',
+            'vote_count': {'BUY': buy_votes, 'SELL': sell_votes, 'HOLD': hold_votes},
+            'individual_signals': {}
+        }
+        selection_reason = "No qualifying signals - conservative HOLD"
 
     # Enhance selected signal with fusion metadata and institutional analysis
     if selected_signal:
