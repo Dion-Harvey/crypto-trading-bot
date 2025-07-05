@@ -1,6 +1,19 @@
 # =============================================================================
 # CRYPTO TRADING BOT - Main Entry Point
 # =============================================================================
+#
+# Copyright (c) 2025 Dion Harvey. All rights reserved.
+# Licensed under Custom License - see LICENSE file for details.
+#
+# INSTITUTIONAL-GRADE BTC TRADING BOT
+# Features: Multi-Strategy Ensemble, Machine Learning, Kelly Criterion,
+# Value-at-Risk Analysis, Advanced Risk Management
+#
+# IMPORTANT: This software contains proprietary trading strategies and
+# algorithms. Commercial use requires explicit written permission.
+# See LICENSE file for complete terms and conditions.
+#
+# =============================================================================
 
 # Import required libraries
 import ccxt
