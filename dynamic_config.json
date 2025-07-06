@@ -1,0 +1,44 @@
+{
+  "strategy_parameters": {
+    "rsi_period": 21,
+    "rsi_oversold": 25,
+    "rsi_overbought": 75,
+    "bb_period": 20,
+    "bb_std_dev": 2.2,
+    "ma_fast": 5,
+    "ma_slow": 21,
+    "vwap_period": 30,
+    "confidence_threshold": 0.4,
+    "min_consensus_votes": 2
+  },
+  "risk_management": {
+    "stop_loss_pct": 0.025,
+    "take_profit_pct": 0.055,
+    "max_drawdown_pct": 0.12,
+    "daily_loss_limit": 2.5,
+    "max_consecutive_losses": 3,
+    "trade_cooldown_seconds": 300,
+    "max_hold_time_minutes": 90
+  },
+  "position_sizing": {
+    "base_amount_usd": 15,
+    "min_amount_usd": 8,
+    "max_amount_usd": 19,
+    "volatility_adjustment": true,
+    "confidence_scaling": true,
+    "loss_reduction_factor": 0.8,
+    "drawdown_reduction_factor": 0.7
+  },
+  "market_filters": {
+    "high_volatility_threshold": 0.025,
+    "volume_surge_threshold": 1.5,
+    "strong_trend_threshold": 0.03,
+    "consolidation_volatility": 0.008
+  },
+  "adaptive_settings": {
+    "performance_review_days": 3,
+    "min_trades_for_adjustment": 10,
+    "adjustment_sensitivity": 0.1,
+    "last_adjustment": null
+  }
+}

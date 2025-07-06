@@ -1,0 +1,29 @@
+{
+  "bot_info": {
+    "last_updated": "2025-07-01T21:08:48.870518",
+    "version": "1.0",
+    "bot_id": "btc_optimized_bot"
+  },
+  "trading_state": {
+    "holding_position": false,
+    "entry_price": null,
+    "stop_loss_price": null,
+    "take_profit_price": null,
+    "trade_id": null,
+    "entry_timestamp": null,
+    "consecutive_losses": 0,
+    "last_trade_time": 0,
+    "active_trade_index": null
+  },
+  "risk_management": {
+    "account_peak_value": 20.0,
+    "max_drawdown_from_peak": 0.0,
+    "daily_pnl_start_balance": null,
+    "daily_pnl_date": null
+  },
+  "performance": {
+    "session_start_time": null,
+    "total_trades_session": 0,
+    "profitable_trades_session": 0
+  }
+}
