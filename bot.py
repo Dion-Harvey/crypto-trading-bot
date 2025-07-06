@@ -347,7 +347,7 @@ def calculate_position_size(current_price, volatility, signal_confidence, total_
     target_position_size = None
 
     if position_mode == 'percentage' and total_portfolio_value <= 100:
-        # Precision-tuned scaling to achieve exact target amounts
+        # Precision-tuned scaling to achieve exact target amounts as discussed
         if total_portfolio_value >= 100:
             target_position_size = 20.0  # $20 for $100+ accounts (20%)
             small_account_scaling = 0.8  # Conservative for larger accounts
@@ -397,11 +397,23 @@ def calculate_position_size(current_price, volatility, signal_confidence, total_
         # Apply bounds based on position sizing mode (for larger accounts)
         final_size = max(min_amount, min(max_amount, institutional_size))
 
-    # 🎯 SAFETY CAP: Never exceed 50% of portfolio in a single trade (relaxed for small accounts)
+    # 🎯 DYNAMIC SAFETY CAP: Adaptive based on account size and target amounts
     if position_mode == 'percentage' and total_portfolio_value > 0:
-        safety_cap = total_portfolio_value * 0.50  # 50% maximum (increased to allow target amounts)
+        # For small accounts (≤$100), allow higher percentages to achieve target amounts
+        if total_portfolio_value <= 25:
+            safety_cap = total_portfolio_value * 0.60  # 60% max for very small accounts
+        elif total_portfolio_value <= 50:
+            safety_cap = total_portfolio_value * 0.55  # 55% max for small accounts
+        elif total_portfolio_value <= 75:
+            safety_cap = total_portfolio_value * 0.35  # 35% max for growing accounts
+        elif total_portfolio_value <= 100:
+            safety_cap = total_portfolio_value * 0.25  # 25% max for medium accounts
+        else:
+            safety_cap = total_portfolio_value * 0.20  # 20% max for larger accounts (conservative)
+
         if final_size > safety_cap:
-            log_message(f"⚠️ Safety cap applied: ${final_size:.2f} → ${safety_cap:.2f} (50% portfolio limit)")
+            safety_pct = (safety_cap / total_portfolio_value) * 100
+            log_message(f"⚠️ Safety cap applied: ${final_size:.2f} → ${safety_cap:.2f} ({safety_pct:.1f}% portfolio limit)")
             final_size = safety_cap
 
     # Ensure final size meets Binance minimum order requirement
