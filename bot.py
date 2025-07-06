@@ -842,6 +842,15 @@ def run_continuously(interval_seconds=60):
                 entry_price = current_price  # Estimate current price as entry
                 stop_loss_price = current_price * (1 - stop_loss_percentage)
                 take_profit_price = current_price * (1 + take_profit_percentage)
+
+                # 🔧 FIX: Update state manager to persist the holding position
+                state_manager.update_trading_state({
+                    'holding_position': True,
+                    'entry_price': entry_price,
+                    'stop_loss_price': stop_loss_price,
+                    'take_profit_price': take_profit_price
+                })
+
                 print(f"🔄 SYNC: Detected existing BTC position worth ${btc_value:.2f}")
                 print(f"🛡️ Risk Levels Set: Entry=${current_price:.2f}, SL=${stop_loss_price:.2f}, TP=${take_profit_price:.2f}")
             elif btc_value <= 1.0 and holding_position:
@@ -849,6 +858,15 @@ def run_continuously(interval_seconds=60):
                 entry_price = None
                 stop_loss_price = None
                 take_profit_price = None
+
+                # 🔧 FIX: Update state manager to clear the holding position
+                state_manager.update_trading_state({
+                    'holding_position': False,
+                    'entry_price': None,
+                    'stop_loss_price': None,
+                    'take_profit_price': None
+                })
+
                 print(f"🔄 SYNC: No significant BTC position detected")
 
             # Initialize strategy ensemble with institutional-grade analysis
