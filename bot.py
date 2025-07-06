@@ -888,6 +888,28 @@ def run_continuously(interval_seconds=60):
             # Intelligent signal fusion with institutional overlay
             signal = fuse_strategy_signals(base_signal, enhanced_signal, adaptive_signal, df, institutional_signal)
 
+            # 🎯 NEW: HIGH/LOW PRICE ANALYSIS FOR PROFIT MAXIMIZATION
+            if signal and signal.get('action') in ['BUY', 'SELL']:
+                signal = enhance_signal_with_high_low_analysis(signal, df, current_price)
+
+            # 🎯 NEW: DAILY HIGH/LOW PROFIT MAXIMIZATION STRATEGIES
+            daily_strategies = implement_daily_high_low_strategies(df, current_price, signal, holding_position)
+            
+            # Enhance main signal with daily high/low strategy insights
+            if daily_strategies.get('optimal_strategy'):
+                optimal_strategy = daily_strategies['optimal_strategy']
+                
+                # If optimal strategy has higher confidence, consider using it
+                if optimal_strategy['confidence'] > signal.get('confidence', 0) + 0.1:  # 10% confidence advantage
+                    signal['daily_strategy_override'] = optimal_strategy
+                    signal['confidence'] = min(0.95, signal.get('confidence', 0) + 0.15)  # Boost confidence
+                    signal['reason'] += f" | Enhanced by {optimal_strategy['strategy']}"
+                    
+                    log_message(f"🎯 DAILY STRATEGY BOOST: {optimal_strategy['strategy']} (+{optimal_strategy['score']:.3f})")
+                
+                # Add daily strategy analysis to signal
+                signal['daily_strategies'] = daily_strategies
+
             # 🎯 NEW: ADVANCED SIGNAL QUALITY ANALYSIS
             if signal and signal.get('action') in ['BUY', 'SELL']:
                 quality_analysis = success_enhancer.analyze_signal_quality(df, signal, current_price)
@@ -1196,11 +1218,33 @@ def run_continuously(interval_seconds=60):
                         ma_long = df['close'].rolling(50).mean().iloc[-1]
                         trend_confirmed = ma_short > ma_medium and current_price > ma_short
 
-                    # Price action confirmation (not in immediate resistance)
+                    # Enhanced price action confirmation using high/low analysis
                     price_action_good = True
+                    high_low_favorable = False
+
                     if len(df) >= 20:
+                        # Traditional check: not near recent highs
                         recent_high = df['high'].iloc[-10:].max()
                         price_action_good = current_price < recent_high * 0.98  # Not near recent highs
+
+                        # Enhanced check: use high/low analysis
+                        if 'high_low_analysis' in signal:
+                            hl_analysis = signal['high_low_analysis']
+
+                            # Favorable for BUY if near support or range bottoms
+                            if signal['action'] == 'BUY':
+                                buy_opportunities = len(hl_analysis.get('buy_opportunities', []))
+                                low_position_count = sum(1 for pos in hl_analysis['price_position'].values()
+                                                       if pos.get('near_low', False))
+                                high_low_favorable = buy_opportunities > 0 or low_position_count >= 1
+
+                                if high_low_favorable:
+                                    log_message(f"✅ HIGH/LOW FAVORABLE FOR BUY: {buy_opportunities} opportunities, {low_position_count} timeframes near lows")
+
+                            # Override traditional check if high/low analysis is very favorable
+                            if high_low_favorable and signal.get('high_low_boost', 0) > 0.3:
+                                price_action_good = True  # Override resistance near recent highs
+                                log_message("🎯 HIGH/LOW analysis overriding traditional price action filter")
 
                     # INTELLIGENT BUY criteria - Adaptive thresholds based on signal quality
                     high_confidence = signal_confidence >= 0.60  # Slightly relaxed from 0.65
@@ -1231,9 +1275,18 @@ def run_continuously(interval_seconds=60):
                     technical_quality = (high_confidence and (good_rsi or support_signal) and
                                        volume_confirmed and trend_confirmed and price_action_good)
 
+                    # Path 5: Daily high/low strategy quality (NEW)
+                    daily_strategy_quality = False
+                    if 'daily_strategy_override' in signal:
+                        daily_override = signal['daily_strategy_override']
+                        daily_strategy_quality = (daily_override['confidence'] > 0.75 and 
+                                                 daily_override['action'] == 'BUY')
+                        if daily_strategy_quality:
+                            log_message(f"✅ Daily Strategy Quality: {daily_override['strategy']} (conf: {daily_override['confidence']:.3f})")
+
                     # Execute if ANY quality path is met
                     execute_buy = (exceptional_quality or consensus_quality or
-                                 institutional_quality or technical_quality)
+                                 institutional_quality or technical_quality or daily_strategy_quality)
 
                     if not execute_buy:
                         print(f"⚠️ BUY signal filtered - no quality path met:")
@@ -1242,7 +1295,11 @@ def run_continuously(interval_seconds=60):
                         print(f"   Consensus: {consensus_quality} (2+ votes + conf≥0.60 + volume/trend/RSI)")
                         print(f"   Institutional: {institutional_quality} (backed + conf≥0.65 + volume/RSI)")
                         print(f"   Technical: {technical_quality} (conf≥0.60 + RSI/support + all confirmations)")
+                        print(f"   Daily Strategy: {daily_strategy_quality} (high-confidence daily high/low strategy)")
                         print(f"   Confirmations: vol={volume_confirmed}, trend={trend_confirmed}, RSI={good_rsi}, price={price_action_good}")
+                        if 'daily_strategy_override' in signal:
+                            daily_override = signal['daily_strategy_override']
+                            print(f"   Daily Override: {daily_override['strategy']} ({daily_override['confidence']:.3f})")
                     else:
                         # Determine which quality path was taken for logging
                         quality_path = "unknown"
@@ -1254,6 +1311,8 @@ def run_continuously(interval_seconds=60):
                             quality_path = "institutional"
                         elif technical_quality:
                             quality_path = "technical"
+                        elif daily_strategy_quality:
+                            quality_path = "daily_strategy"
 
                     if not execute_buy:
                         print(f"⚠️ BUY signal filtered - no quality path met:")
@@ -1377,11 +1436,25 @@ def run_continuously(interval_seconds=60):
                 # Check trend filter to avoid selling in strong uptrends (let profits run)
                 trend_filtered = is_strong_trend(df, signal)
 
-                if trend_filtered and not profit_taking:
+                # Enhanced high/low analysis for SELL decisions
+                high_low_sell_signal = False
+                if 'high_low_analysis' in signal:
+                    hl_analysis = signal['high_low_analysis']
+                    sell_opportunities = len(hl_analysis.get('sell_opportunities', []))
+                    high_position_count = sum(1 for pos in hl_analysis['price_position'].values()
+                                            if pos.get('near_high', False))
+
+                    # Strong high/low sell signal
+                    high_low_sell_signal = (sell_opportunities > 0 or high_position_count >= 2)
+
+                    if high_low_sell_signal:
+                        log_message(f"🎯 HIGH/LOW SELL SIGNAL: {sell_opportunities} opportunities, {high_position_count} timeframes near highs")
+
+                if trend_filtered and not profit_taking and not high_low_sell_signal:
                     print("⚠️ SELL signal filtered out - letting profits run in strong uptrend")
-                elif not momentum_check:
+                elif not momentum_check and not high_low_sell_signal:
                     pass  # Already printed message above
-                elif signal_confidence >= 0.65 and (volume_confirmed or rsi_overbought or profit_taking):
+                elif (signal_confidence >= 0.65 and (volume_confirmed or rsi_overbought or profit_taking)) or high_low_sell_signal:
                     print(f"📤 Enhanced SELL signal - Current P&L: {current_pnl:.2%}")
                     balance = safe_api_call(exchange.fetch_balance)
                     btc_amount = balance['BTC']['free']
@@ -1611,6 +1684,725 @@ def fuse_strategy_signals(base_signal, enhanced_signal, adaptive_signal, df, ins
     selected_signal = validate_and_enhance_signal(selected_signal)
 
     return selected_signal
+
+# =============================================================================
+# ENHANCED HIGH/LOW PRICE ANALYSIS FOR PROFIT MAXIMIZATION
+# =============================================================================
+
+def analyze_high_low_opportunities(df, current_price, lookback_periods=[5, 10, 20, 50]):
+    """
+    Advanced high/low price analysis to maximize profit opportunities
+    Analyzes multiple timeframes to identify optimal entry/exit points
+    """
+    opportunities = {
+        'buy_opportunities': [],
+        'sell_opportunities': [],
+        'support_levels': [],
+        'resistance_levels': [],
+        'price_position': {},
+        'volatility_analysis': {}
+    }
+
+    try:
+        if len(df) < max(lookback_periods):
+            return opportunities
+
+        # 1. MULTI-TIMEFRAME HIGH/LOW ANALYSIS
+        for period in lookback_periods:
+            if len(df) >= period:
+                period_high = df['high'].iloc[-period:].max()
+                period_low = df['low'].iloc[-period:].min()
+                period_range = period_high - period_low
+
+                # Calculate current position within the range
+                if period_range > 0:
+                    position_in_range = (current_price - period_low) / period_range
+                    opportunities['price_position'][f'{period}d'] = {
+                        'high': period_high,
+                        'low': period_low,
+                        'range': period_range,
+                        'position_pct': position_in_range * 100,
+                        'near_low': position_in_range < 0.25,  # Bottom 25%
+                        'near_high': position_in_range > 0.75,  # Top 25%
+                        'mid_range': 0.4 <= position_in_range <= 0.6  # Middle 20%
+                    }
+
+        # 2. SUPPORT AND RESISTANCE LEVEL IDENTIFICATION
+        # Find recent swing highs and lows
+        if len(df) >= 20:
+            # Swing highs (local maxima)
+            for i in range(2, len(df)-2):
+                if (df['high'].iloc[i] > df['high'].iloc[i-1] and
+                    df['high'].iloc[i] > df['high'].iloc[i-2] and
+                    df['high'].iloc[i] > df['high'].iloc[i+1] and
+                    df['high'].iloc[i] > df['high'].iloc[i+2]):
+                    opportunities['resistance_levels'].append({
+                        'price': df['high'].iloc[i],
+                        'strength': 1,
+                        'distance_pct': abs(current_price - df['high'].iloc[i]) / current_price * 100
+                    })
+
+            # Swing lows (local minima)
+            for i in range(2, len(df)-2):
+                if (df['low'].iloc[i] < df['low'].iloc[i-1] and
+                    df['low'].iloc[i] < df['low'].iloc[i-2] and
+                    df['low'].iloc[i] < df['low'].iloc[i+1] and
+                    df['low'].iloc[i] < df['low'].iloc[i+2]):
+                    opportunities['support_levels'].append({
+                        'price': df['low'].iloc[i],
+                        'strength': 1,
+                        'distance_pct': abs(current_price - df['low'].iloc[i]) / current_price * 100
+                    })
+
+        # 3. VOLATILITY-BASED OPPORTUNITIES
+        if len(df) >= 20:
+            # Calculate Average True Range (ATR) for volatility
+            high_low = df['high'] - df['low']
+            high_close = abs(df['high'] - df['close'].shift())
+            low_close = abs(df['low'] - df['close'].shift())
+            true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+            atr = true_range.rolling(14).mean().iloc[-1]
+
+            opportunities['volatility_analysis'] = {
+                'atr': atr,
+                'atr_pct': (atr / current_price) * 100,
+                'volatility_level': 'HIGH' if (atr / current_price) > 0.03 else 'NORMAL'
+            }
+
+        # 4. IDENTIFY SPECIFIC BUY OPPORTUNITIES
+        # Near support levels with good risk/reward
+        for support in opportunities['support_levels'][:3]:
+            if support['distance_pct'] < 2.0:  # Within 2% of support
+                opportunities['buy_opportunities'].append({
+                    'type': 'SUPPORT_BOUNCE',
+                    'entry_price': support['price'],
+                    'confidence': min(0.8, 1.0 - support['distance_pct']/2.0),
+                    'reason': f"Near support at ${support['price']:.2f}"
+                })
+
+        # Bottom of recent ranges
+        for period, pos_data in opportunities['price_position'].items():
+            if pos_data['near_low'] and pos_data['range'] > current_price * 0.02:  # Significant range
+                opportunities['buy_opportunities'].append({
+                    'type': 'RANGE_BOTTOM',
+                    'entry_price': current_price,
+                    'confidence': 0.7,
+                    'reason': f"Near {period} low (bottom 25% of range)"
+                })
+
+        # 5. IDENTIFY SPECIFIC SELL OPPORTUNITIES
+        # Near resistance levels
+        for resistance in opportunities['resistance_levels'][:3]:
+            if resistance['distance_pct'] < 2.0:  # Within 2% of resistance
+                opportunities['sell_opportunities'].append({
+                    'type': 'RESISTANCE_REJECTION',
+                    'exit_price': resistance['price'],
+                    'confidence': min(0.8, 1.0 - resistance['distance_pct']/2.0),
+                    'reason': f"Near resistance at ${resistance['price']:.2f}"
+                })
+
+        # Top of recent ranges
+        for period, pos_data in opportunities['price_position'].items():
+            if pos_data['near_high'] and pos_data['range'] > current_price * 0.02:  # Significant range
+                opportunities['sell_opportunities'].append({
+                    'type': 'RANGE_TOP',
+                    'exit_price': current_price,
+                    'confidence': 0.7,
+                    'reason': f"Near {period} high (top 25% of range)"
+                })
+
+    except Exception as e:
+        log_message(f"❌ Error in high/low analysis: {e}")
+
+    return opportunities
+
+def enhance_signal_with_high_low_analysis(signal, df, current_price):
+    """
+    Enhance existing trading signals with high/low price analysis
+    """
+    if not signal or len(df) < 50:
+        return signal
+
+    try:
+        # Get high/low opportunities
+        hl_analysis = analyze_high_low_opportunities(df, current_price)
+
+        # Add high/low analysis to signal
+        signal['high_low_analysis'] = hl_analysis
+
+        # Enhance BUY signals
+        if signal.get('action') == 'BUY':
+            buy_score = 0
+            buy_reasons = []
+
+            # Check if we're near support or range bottoms
+            for opp in hl_analysis['buy_opportunities']:
+                buy_score += opp['confidence'] * 0.2
+                buy_reasons.append(opp['reason'])
+
+            # Check price position in ranges
+            low_position_count = sum(1 for pos in hl_analysis['price_position'].values()
+                                   if pos['near_low'])
+
+            if low_position_count >= 2:  # Near lows in multiple timeframes
+                buy_score += 0.3
+                buy_reasons.append(f"Near lows in {low_position_count} timeframes")
+
+            # Enhance confidence if good high/low setup
+            if buy_score > 0.2:
+                original_confidence = signal.get('confidence', 0.5)
+                enhanced_confidence = min(0.95, original_confidence + buy_score)
+                signal['confidence'] = enhanced_confidence
+                signal['high_low_boost'] = buy_score
+                signal['high_low_reasons'] = buy_reasons
+
+                log_message(f"🎯 HIGH/LOW BUY BOOST: +{buy_score:.2f} confidence")
+                for reason in buy_reasons[:3]:  # Top 3 reasons
+                    log_message(f"   {reason}")
+
+        # Enhance SELL signals
+        elif signal.get('action') == 'SELL':
+            sell_score = 0
+            sell_reasons = []
+
+            # Check if we're near resistance or range tops
+            for opp in hl_analysis['sell_opportunities']:
+                sell_score += opp['confidence'] * 0.2
+                sell_reasons.append(opp['reason'])
+
+            # Check price position in ranges
+            high_position_count = sum(1 for pos in hl_analysis['price_position'].values()
+                                    if pos['near_high'])
+
+            if high_position_count >= 2:  # Near highs in multiple timeframes
+                sell_score += 0.3
+                sell_reasons.append(f"Near highs in {high_position_count} timeframes")
+
+            # Enhance confidence if good high/low setup
+            if sell_score > 0.2:
+                original_confidence = signal.get('confidence', 0.5)
+                enhanced_confidence = min(0.95, original_confidence + sell_score)
+                signal['confidence'] = enhanced_confidence
+                signal['high_low_boost'] = sell_score
+                signal['high_low_reasons'] = sell_reasons
+
+                log_message(f"🎯 HIGH/LOW SELL BOOST: +{sell_score:.2f} confidence")
+                for reason in sell_reasons[:3]:  # Top 3 reasons
+                    log_message(f"   {reason}")
+
+        # Add detailed logging of price position
+        log_message(f"📊 PRICE POSITION ANALYSIS:")
+        for period, pos_data in hl_analysis['price_position'].items():
+            log_message(f"   {period}: {pos_data['position_pct']:.1f}% of range (${pos_data['low']:.2f} - ${pos_data['high']:.2f})")
+
+    except Exception as e:
+        log_message(f"❌ Error enhancing signal with high/low: {e}")
+
+    return signal
+
+# =============================================================================
+# DAILY HIGH/LOW PROFIT MAXIMIZATION STRATEGIES
+# =============================================================================
+
+def implement_daily_high_low_strategies(df, current_price, signal, holding_position):
+    """
+    Implement the 6 key strategies for maximizing profits from daily highs/lows:
+    1. Day Trading (Scalping) - Quick profits from minor moves
+    2. Swing Trading - Capture multi-day swings 
+    3. Arbitrage - Exploit price inefficiencies
+    4. Dollar-Cost Averaging - Systematic accumulation
+    5. Momentum Trading - Ride strong trends
+    6. Reversal Trading - Capitalize on trend changes
+    """
+    strategy_signals = {
+        'day_trading': {'action': 'HOLD', 'confidence': 0.0, 'reasons': []},
+        'swing_trading': {'action': 'HOLD', 'confidence': 0.0, 'reasons': []},
+        'momentum_trading': {'action': 'HOLD', 'confidence': 0.0, 'reasons': []},
+        'reversal_trading': {'action': 'HOLD', 'confidence': 0.0, 'reasons': []},
+        'dca_signal': {'action': 'HOLD', 'confidence': 0.0, 'reasons': []},
+        'optimal_strategy': None
+    }
+    
+    try:
+        if len(df) < 50:
+            return strategy_signals
+            
+        # Get daily high/low data for the last few days
+        daily_highs = df['high'].rolling(24).max().dropna()  # 24-hour rolling highs (if 1h data)
+        daily_lows = df['low'].rolling(24).min().dropna()    # 24-hour rolling lows
+        
+        # Current position within today's range
+        if len(daily_highs) > 0 and len(daily_lows) > 0:
+            today_high = daily_highs.iloc[-1]
+            today_low = daily_lows.iloc[-1]
+            daily_range = today_high - today_low
+            
+            if daily_range > 0:
+                position_in_daily_range = (current_price - today_low) / daily_range
+                
+                # 1. DAY TRADING / SCALPING STRATEGY
+                strategy_signals['day_trading'] = analyze_scalping_opportunities(
+                    df, current_price, today_high, today_low, position_in_daily_range
+                )
+                
+                # 2. SWING TRADING STRATEGY  
+                strategy_signals['swing_trading'] = analyze_swing_opportunities(
+                    df, current_price, daily_highs, daily_lows, holding_position
+                )
+                
+                # 3. MOMENTUM TRADING STRATEGY
+                strategy_signals['momentum_trading'] = analyze_momentum_opportunities(
+                    df, current_price, position_in_daily_range
+                )
+                
+                # 4. REVERSAL TRADING STRATEGY
+                strategy_signals['reversal_trading'] = analyze_reversal_opportunities(
+                    df, current_price, today_high, today_low, position_in_daily_range
+                )
+                
+                # 5. DOLLAR-COST AVERAGING SIGNAL
+                strategy_signals['dca_signal'] = analyze_dca_opportunities(
+                    df, current_price, position_in_daily_range, holding_position
+                )
+                
+                # 6. SELECT OPTIMAL STRATEGY based on market conditions
+                strategy_signals['optimal_strategy'] = select_optimal_high_low_strategy(
+                    strategy_signals, df, current_price
+                )
+                
+                # Log analysis
+                log_message(f"📊 DAILY HIGH/LOW ANALYSIS:")
+                log_message(f"   Today's Range: ${today_low:.2f} - ${today_high:.2f} (${daily_range:.2f})")
+                log_message(f"   Current Position: {position_in_daily_range*100:.1f}% of daily range")
+                
+                # Log each strategy recommendation
+                for strategy_name, strategy_data in strategy_signals.items():
+                    if strategy_name != 'optimal_strategy' and strategy_data['confidence'] > 0.5:
+                        action = strategy_data['action']
+                        conf = strategy_data['confidence']
+                        reasons = strategy_data['reasons'][:2]  # Top 2 reasons
+                        log_message(f"   {strategy_name.upper()}: {action} ({conf:.2f}) - {', '.join(reasons)}")
+                
+                if strategy_signals['optimal_strategy']:
+                    optimal = strategy_signals['optimal_strategy']
+                    log_message(f"🎯 OPTIMAL STRATEGY: {optimal['strategy']} - {optimal['reason']}")
+                    
+    except Exception as e:
+        log_message(f"❌ Error in daily high/low strategy analysis: {e}")
+    
+    return strategy_signals
+
+def analyze_scalping_opportunities(df, current_price, today_high, today_low, position_in_range):
+    """
+    Day Trading/Scalping: Quick profits from minor price changes within the day
+    """
+    signal = {'action': 'HOLD', 'confidence': 0.0, 'reasons': []}
+    
+    try:
+        if len(df) < 10:
+            return signal
+            
+        # Look for quick reversal opportunities within daily range
+        recent_prices = df['close'].iloc[-5:]  # Last 5 periods
+        price_momentum = (recent_prices.iloc[-1] - recent_prices.iloc[0]) / recent_prices.iloc[0]
+        
+        # Volatility check (scalping needs volatility)
+        recent_volatility = df['close'].pct_change().iloc[-10:].std()
+        high_volatility = recent_volatility > 0.02  # 2%+ volatility
+        
+        # SCALPING BUY signals
+        if position_in_range < 0.3 and price_momentum < -0.005 and high_volatility:  # Near daily low, quick drop
+            signal['action'] = 'BUY'
+            signal['confidence'] = 0.75
+            signal['reasons'] = [
+                f"Scalp buy: {position_in_range*100:.1f}% of daily range",
+                f"Quick momentum drop: {price_momentum*100:.2f}%",
+                "High volatility environment"
+            ]
+            
+        # SCALPING SELL signals  
+        elif position_in_range > 0.7 and price_momentum > 0.005 and high_volatility:  # Near daily high, quick rise
+            signal['action'] = 'SELL'
+            signal['confidence'] = 0.75
+            signal['reasons'] = [
+                f"Scalp sell: {position_in_range*100:.1f}% of daily range", 
+                f"Quick momentum rise: {price_momentum*100:.2f}%",
+                "High volatility environment"
+            ]
+            
+        # Range-bound scalping
+        elif 0.45 <= position_in_range <= 0.55 and abs(price_momentum) > 0.003:  # Mid-range with momentum
+            if price_momentum > 0:
+                signal['action'] = 'SELL'  # Sell momentum peaks in mid-range
+                signal['confidence'] = 0.6
+                signal['reasons'] = ["Mid-range momentum peak", "Scalping range top"]
+            else:
+                signal['action'] = 'BUY'   # Buy momentum dips in mid-range  
+                signal['confidence'] = 0.6
+                signal['reasons'] = ["Mid-range momentum dip", "Scalping range bottom"]
+                
+    except Exception as e:
+        log_message(f"❌ Error in scalping analysis: {e}")
+    
+    return signal
+
+def analyze_swing_opportunities(df, current_price, daily_highs, daily_lows, holding_position):
+    """
+    Swing Trading: Profit from multi-day price swings
+    """
+    signal = {'action': 'HOLD', 'confidence': 0.0, 'reasons': []}
+    
+    try:
+        if len(daily_highs) < 5 or len(daily_lows) < 5:
+            return signal
+            
+        # Analyze multi-day swing patterns
+        recent_highs = daily_highs.iloc[-3:]  # Last 3 days of highs
+        recent_lows = daily_lows.iloc[-3:]    # Last 3 days of lows
+        
+        # Swing low identification (good for BUY)
+        current_low = recent_lows.iloc[-1]
+        is_swing_low = (current_low <= recent_lows.min() and 
+                       current_price <= current_low * 1.02)  # Within 2% of swing low
+        
+        # Swing high identification (good for SELL)
+        current_high = recent_highs.iloc[-1] 
+        is_swing_high = (current_high >= recent_highs.max() and
+                        current_price >= current_high * 0.98)  # Within 2% of swing high
+        
+        # Multi-day trend analysis
+        if len(daily_highs) >= 5:
+            high_trend = (recent_highs.iloc[-1] - recent_highs.iloc[0]) / recent_highs.iloc[0]
+            low_trend = (recent_lows.iloc[-1] - recent_lows.iloc[0]) / recent_lows.iloc[0]
+            
+            # SWING BUY signals
+            if is_swing_low and not holding_position:
+                signal['action'] = 'BUY'
+                signal['confidence'] = 0.8
+                signal['reasons'] = [
+                    "Multi-day swing low identified",
+                    f"Price near lowest low: ${current_low:.2f}",
+                    f"Low trend: {low_trend*100:.2f}%"
+                ]
+                
+            # SWING SELL signals
+            elif is_swing_high and holding_position:
+                signal['action'] = 'SELL' 
+                signal['confidence'] = 0.8
+                signal['reasons'] = [
+                    "Multi-day swing high identified",
+                    f"Price near highest high: ${current_high:.2f}",
+                    f"High trend: {high_trend*100:.2f}%"
+                ]
+                
+            # Trend continuation swings
+            elif high_trend > 0.03 and low_trend > 0.02 and not holding_position:  # Strong uptrend
+                signal['action'] = 'BUY'
+                signal['confidence'] = 0.7
+                signal['reasons'] = [
+                    "Uptrend swing continuation",
+                    f"Rising lows trend: {low_trend*100:.2f}%",
+                    "Multi-day bullish structure"
+                ]
+                
+    except Exception as e:
+        log_message(f"❌ Error in swing analysis: {e}")
+    
+    return signal
+
+def analyze_momentum_opportunities(df, current_price, position_in_range):
+    """
+    Momentum Trading: Ride existing strong price trends
+    """
+    signal = {'action': 'HOLD', 'confidence': 0.0, 'reasons': []}
+    
+    try:
+        if len(df) < 20:
+            return signal
+            
+        # Calculate momentum indicators
+        short_ma = df['close'].rolling(5).mean().iloc[-1]
+        medium_ma = df['close'].rolling(10).mean().iloc[-1]
+        long_ma = df['close'].rolling(20).mean().iloc[-1]
+        
+        # Price momentum over different periods
+        momentum_5 = (df['close'].iloc[-1] - df['close'].iloc[-6]) / df['close'].iloc[-6]  # 5-period momentum
+        momentum_10 = (df['close'].iloc[-1] - df['close'].iloc[-11]) / df['close'].iloc[-11]  # 10-period momentum
+        
+        # Volume momentum (if available)
+        volume_momentum = 1.0  # Default
+        if 'volume' in df.columns and len(df) >= 10:
+            recent_volume = df['volume'].iloc[-5:].mean()
+            avg_volume = df['volume'].iloc[-20:].mean() 
+            volume_momentum = recent_volume / avg_volume if avg_volume > 0 else 1.0
+        
+        # Strong upward momentum
+        strong_up_momentum = (
+            current_price > short_ma > medium_ma > long_ma and  # MA alignment
+            momentum_5 > 0.02 and momentum_10 > 0.03 and        # Strong momentum
+            volume_momentum > 1.3                               # Volume confirmation
+        )
+        
+        # Strong downward momentum  
+        strong_down_momentum = (
+            current_price < short_ma < medium_ma < long_ma and  # Bear MA alignment
+            momentum_5 < -0.02 and momentum_10 < -0.03 and      # Strong down momentum
+            volume_momentum > 1.3                               # Volume confirmation
+        )
+        
+        # MOMENTUM BUY signals
+        if strong_up_momentum and position_in_range < 0.8:  # Don't chase tops
+            signal['action'] = 'BUY'
+            signal['confidence'] = 0.85
+            signal['reasons'] = [
+                f"Strong upward momentum: {momentum_5*100:.2f}% (5p), {momentum_10*100:.2f}% (10p)",
+                "MA alignment: bullish",
+                f"Volume momentum: {volume_momentum:.2f}x"
+            ]
+            
+        # MOMENTUM SELL signals
+        elif strong_down_momentum and position_in_range > 0.2:  # Don't chase bottoms
+            signal['action'] = 'SELL'
+            signal['confidence'] = 0.85  
+            signal['reasons'] = [
+                f"Strong downward momentum: {momentum_5*100:.2f}% (5p), {momentum_10*100:.2f}% (10p)",
+                "MA alignment: bearish", 
+                f"Volume momentum: {volume_momentum:.2f}x"
+            ]
+            
+        # Momentum continuation in daily range
+        elif strong_up_momentum and 0.3 <= position_in_range <= 0.6:  # Mid-range momentum
+            signal['action'] = 'BUY'
+            signal['confidence'] = 0.7
+            signal['reasons'] = [
+                "Mid-range momentum continuation", 
+                f"Daily position: {position_in_range*100:.1f}%",
+                "Momentum trend alignment"
+            ]
+            
+    except Exception as e:
+        log_message(f"❌ Error in momentum analysis: {e}")
+        
+    return signal
+
+def analyze_reversal_opportunities(df, current_price, today_high, today_low, position_in_range):
+    """
+    Reversal Trading: Capitalize on trend changes using RSI, MACD, etc.
+    """
+    signal = {'action': 'HOLD', 'confidence': 0.0, 'reasons': []}
+    
+    try:
+        if len(df) < 26:  # Need enough data for MACD
+            return signal
+            
+        # Calculate RSI
+        rsi = calculate_rsi_for_reversals(df['close'])
+        current_rsi = rsi.iloc[-1] if len(rsi) > 0 else 50
+        
+        # Calculate MACD
+        macd_line, macd_signal, macd_histogram = calculate_macd_for_reversals(df['close'])
+        
+        # Bollinger Bands for reversal identification
+        bb_upper, bb_middle, bb_lower = calculate_bollinger_bands(df['close'])
+        
+        # REVERSAL BUY signals (oversold reversal)
+        oversold_rsi = current_rsi < 30
+        macd_bullish_cross = (len(macd_line) > 1 and 
+                             macd_line.iloc[-1] > macd_signal.iloc[-1] and 
+                             macd_line.iloc[-2] <= macd_signal.iloc[-2])
+        near_bb_lower = current_price <= bb_lower.iloc[-1] * 1.02
+        extreme_daily_low = position_in_range < 0.15  # Bottom 15% of daily range
+        
+        if oversold_rsi and (macd_bullish_cross or near_bb_lower) and extreme_daily_low:
+            signal['action'] = 'BUY'
+            signal['confidence'] = 0.9
+            signal['reasons'] = [
+                f"Oversold reversal: RSI {current_rsi:.1f}",
+                f"Daily low extreme: {position_in_range*100:.1f}% of range",
+                "MACD bullish cross" if macd_bullish_cross else "Near Bollinger lower"
+            ]
+            
+        # REVERSAL SELL signals (overbought reversal)
+        overbought_rsi = current_rsi > 70
+        macd_bearish_cross = (len(macd_line) > 1 and
+                             macd_line.iloc[-1] < macd_signal.iloc[-1] and
+                             macd_line.iloc[-2] >= macd_signal.iloc[-2])
+        near_bb_upper = current_price >= bb_upper.iloc[-1] * 0.98
+        extreme_daily_high = position_in_range > 0.85  # Top 15% of daily range
+        
+        if overbought_rsi and (macd_bearish_cross or near_bb_upper) and extreme_daily_high:
+            signal['action'] = 'SELL'
+            signal['confidence'] = 0.9
+            signal['reasons'] = [
+                f"Overbought reversal: RSI {current_rsi:.1f}",
+                f"Daily high extreme: {position_in_range*100:.1f}% of range", 
+                "MACD bearish cross" if macd_bearish_cross else "Near Bollinger upper"
+            ]
+            
+        # Mid-range reversals (lower confidence)
+        elif oversold_rsi and 0.2 <= position_in_range <= 0.4:  # Oversold in lower-mid range
+            signal['action'] = 'BUY'
+            signal['confidence'] = 0.65
+            signal['reasons'] = [
+                f"Mid-range oversold: RSI {current_rsi:.1f}",
+                f"Lower-mid daily range: {position_in_range*100:.1f}%"
+            ]
+            
+        elif overbought_rsi and 0.6 <= position_in_range <= 0.8:  # Overbought in upper-mid range
+            signal['action'] = 'SELL'  
+            signal['confidence'] = 0.65
+            signal['reasons'] = [
+                f"Mid-range overbought: RSI {current_rsi:.1f}",
+                f"Upper-mid daily range: {position_in_range*100:.1f}%"
+            ]
+            
+    except Exception as e:
+        log_message(f"❌ Error in reversal analysis: {e}")
+        
+    return signal
+
+def analyze_dca_opportunities(df, current_price, position_in_range, holding_position):
+    """
+    Dollar-Cost Averaging: Systematic accumulation during dips
+    """
+    signal = {'action': 'HOLD', 'confidence': 0.0, 'reasons': []}
+    
+    try:
+        # DCA is about consistent buying regardless of price, but we can optimize timing
+        
+        # Enhanced DCA: buy more during dips, less during peaks
+        if position_in_range < 0.4 and not holding_position:  # Lower 40% of daily range
+            dca_multiplier = 1.5  # Buy 50% more during dips
+            signal['action'] = 'BUY'
+            signal['confidence'] = 0.7
+            signal['reasons'] = [
+                f"DCA dip buying: {position_in_range*100:.1f}% of daily range",
+                f"Enhanced DCA: {dca_multiplier}x normal amount",
+                "Systematic accumulation strategy"
+            ]
+            
+        elif position_in_range < 0.6 and not holding_position:  # Normal DCA range
+            signal['action'] = 'BUY'
+            signal['confidence'] = 0.5
+            signal['reasons'] = [
+                "Regular DCA buying opportunity",
+                f"Mid-range position: {position_in_range*100:.1f}%",
+                "Dollar-cost averaging strategy"
+            ]
+            
+        # DCA selling (taking profits systematically)
+        elif position_in_range > 0.75 and holding_position:  # Top 25% of daily range
+            signal['action'] = 'SELL'
+            signal['confidence'] = 0.6
+            signal['reasons'] = [
+                "DCA profit taking opportunity", 
+                f"Daily high region: {position_in_range*100:.1f}%",
+                "Systematic profit realization"
+            ]
+            
+    except Exception as e:
+        log_message(f"❌ Error in DCA analysis: {e}")
+        
+    return signal
+
+def select_optimal_high_low_strategy(strategy_signals, df, current_price):
+    """
+    Select the optimal strategy based on current market conditions and signal strength
+    """
+    optimal = None
+    
+    try:
+        # Score each strategy based on confidence and market suitability
+        strategy_scores = {}
+        
+        for strategy_name, strategy_data in strategy_signals.items():
+            if strategy_name == 'optimal_strategy':
+                continue
+                
+            confidence = strategy_data['confidence']
+            action = strategy_data['action']
+            
+            if action in ['BUY', 'SELL'] and confidence > 0.5:
+                # Base score is confidence
+                score = confidence
+                
+                # Adjust score based on market conditions
+                volatility = df['close'].pct_change().iloc[-10:].std()
+                
+                # High volatility favors scalping and momentum
+                if strategy_name in ['day_trading', 'momentum_trading'] and volatility > 0.025:
+                    score *= 1.2
+                    
+                # Low volatility favors swing trading and DCA
+                elif strategy_name in ['swing_trading', 'dca_signal'] and volatility < 0.015:
+                    score *= 1.2
+                    
+                # Reversal trading gets bonus for extreme RSI
+                elif strategy_name == 'reversal_trading':
+                    try:
+                        rsi = calculate_rsi_for_reversals(df['close'])
+                        current_rsi = rsi.iloc[-1] if len(rsi) > 0 else 50
+                        if current_rsi < 25 or current_rsi > 75:  # Extreme RSI
+                            score *= 1.3
+                    except:
+                        pass
+                        
+                strategy_scores[strategy_name] = score
+        
+        # Select highest scoring strategy
+        if strategy_scores:
+            best_strategy = max(strategy_scores.items(), key=lambda x: x[1])
+            strategy_name, score = best_strategy
+            
+            optimal = {
+                'strategy': strategy_name,
+                'action': strategy_signals[strategy_name]['action'],
+                'confidence': strategy_signals[strategy_name]['confidence'],
+                'score': score,
+                'reason': f"Highest score ({score:.3f}) among {len(strategy_scores)} active strategies",
+                'all_scores': strategy_scores
+            }
+            
+    except Exception as e:
+        log_message(f"❌ Error selecting optimal strategy: {e}")
+        
+    return optimal
+
+# Helper functions for technical indicators
+def calculate_rsi_for_reversals(prices, period=14):
+    """Calculate RSI for reversal analysis"""
+    try:
+        delta = prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+    except:
+        return pd.Series([50] * len(prices), index=prices.index)
+
+def calculate_macd_for_reversals(prices, fast=12, slow=26, signal=9):
+    """Calculate MACD for reversal analysis"""
+    try:
+        ema_fast = prices.ewm(span=fast).mean()
+        ema_slow = prices.ewm(span=slow).mean()
+        macd_line = ema_fast - ema_slow
+        macd_signal = macd_line.ewm(span=signal).mean()
+        macd_histogram = macd_line - macd_signal
+        return macd_line, macd_signal, macd_histogram
+    except:
+        return pd.Series([0] * len(prices)), pd.Series([0] * len(prices)), pd.Series([0] * len(prices))
+
+def calculate_bollinger_bands(prices, period=20, std_dev=2):
+    """Calculate Bollinger Bands"""
+    try:
+        rolling_mean = prices.rolling(window=period).mean()
+        rolling_std = prices.rolling(window=period).std()
+        upper_band = rolling_mean + (rolling_std * std_dev)
+        lower_band = rolling_mean - (rolling_std * std_dev)
+        return upper_band, rolling_mean, lower_band
+    except:
+        return pd.Series([0] * len(prices)), pd.Series([0] * len(prices)), pd.Series([0] * len(prices))
 
 # =============================================================================
 # PLACEHOLDER FUNCTIONS FOR MISSING IMPLEMENTATIONS
