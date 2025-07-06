@@ -342,12 +342,67 @@ def calculate_position_size(current_price, volatility, signal_confidence, total_
     else:
         size_adjustment = 1.0
 
+    # 🎯 DYNAMIC SCALING FOR SMALL ACCOUNTS (Precision-tuned for target amounts)
+    small_account_scaling = 1.0
+    target_position_size = None
+
+    if position_mode == 'percentage' and total_portfolio_value <= 100:
+        # Precision-tuned scaling to achieve exact target amounts
+        if total_portfolio_value >= 100:
+            target_position_size = 20.0  # $20 for $100+ accounts (20%)
+            small_account_scaling = 0.8  # Conservative for larger accounts
+        elif total_portfolio_value >= 75:
+            target_position_size = 18.75  # $18.75 for $75-100 accounts (25%)
+            small_account_scaling = 1.0  # Baseline scaling
+        elif total_portfolio_value >= 50:
+            target_position_size = 15.0  # $15 for $50-75 accounts (30%)
+            small_account_scaling = 1.2  # Slightly aggressive
+        elif total_portfolio_value >= 25:
+            target_position_size = 12.50  # $12.50 for $25-50 accounts (50%)
+            small_account_scaling = 1.6  # More aggressive for growth
+        else:
+            # For accounts under $25, scale proportionally but respect minimum order
+            target_position_size = max(10.0, total_portfolio_value * 0.50)  # 50% or $10 minimum
+            small_account_scaling = 2.0  # Maximum scaling for tiny accounts
+
+        # Calculate actual percentage for logging
+        actual_percentage = (target_position_size / total_portfolio_value) * 100
+
+        log_message(f"🎯 SMALL ACCOUNT SCALING:")
+        log_message(f"   Portfolio: ${total_portfolio_value:.2f}")
+        log_message(f"   Target Position: ${target_position_size:.2f} ({actual_percentage:.1f}%)")
+        log_message(f"   Scaling Factor: {small_account_scaling:.1f}x")
+
+    # Apply small account scaling
+    size_adjustment = size_adjustment * small_account_scaling
+
     # Combine Kelly sizing with all risk factors
     institutional_size = (kelly_size * volatility_factor * confidence_factor *
                          loss_factor * drawdown_factor * time_factor * var_factor * size_adjustment)
 
-    # Apply bounds based on position sizing mode
-    final_size = max(min_amount, min(max_amount, institutional_size))
+    # For small accounts with target position size, use direct targeting
+    if target_position_size is not None:
+        # Use target position directly, only adjust for major risk factors
+        major_risk_adjustment = min(volatility_factor, confidence_factor, loss_factor, drawdown_factor)
+
+        # Only reduce size if there are major risk concerns (< 0.8)
+        if major_risk_adjustment < 0.8:
+            risk_adjusted_target = target_position_size * major_risk_adjustment
+            log_message(f"   Risk adjustment applied: ${target_position_size:.2f} → ${risk_adjusted_target:.2f}")
+            final_size = max(min_amount, min(max_amount, risk_adjusted_target))
+        else:
+            # Use target size directly for normal market conditions
+            final_size = max(min_amount, min(max_amount, target_position_size))
+    else:
+        # Apply bounds based on position sizing mode (for larger accounts)
+        final_size = max(min_amount, min(max_amount, institutional_size))
+
+    # 🎯 SAFETY CAP: Never exceed 50% of portfolio in a single trade (relaxed for small accounts)
+    if position_mode == 'percentage' and total_portfolio_value > 0:
+        safety_cap = total_portfolio_value * 0.50  # 50% maximum (increased to allow target amounts)
+        if final_size > safety_cap:
+            log_message(f"⚠️ Safety cap applied: ${final_size:.2f} → ${safety_cap:.2f} (50% portfolio limit)")
+            final_size = safety_cap
 
     # Ensure final size meets Binance minimum order requirement
     BINANCE_MIN_ORDER_USD = 10.0
