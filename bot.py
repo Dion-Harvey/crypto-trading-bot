@@ -1294,6 +1294,10 @@ def run_continuously(interval_seconds=60):
                         if daily_strategy_quality:
                             log_message(f"✅ Daily Strategy Quality: {daily_override['strategy']} (conf: {daily_override['confidence']:.3f})")
 
+                    # Define quality path variables before using them
+                    consensus_quality = (buy_votes >= 2 and signal_confidence >= 0.60 and (volume_confirmed or trend_confirmed or good_rsi))
+                    technical_quality = (signal_confidence >= 0.60 and (good_rsi or support_signal) and volume_confirmed and trend_confirmed and price_action_good)
+
                     # Execute if ANY quality path is met (day trader approach)
                     execute_buy = (day_trader_primary or momentum_trade or
                                  institutional_quality or exceptional_quality or daily_strategy_quality)
@@ -1315,24 +1319,15 @@ def run_continuously(interval_seconds=60):
                         quality_path = "unknown"
                         if exceptional_quality:
                             quality_path = "exceptional"
-                        elif consensus_quality:
-                            quality_path = "consensus"
+                        elif day_trader_primary:
+                            quality_path = "day_trader_primary"
+                        elif momentum_trade:
+                            quality_path = "momentum_trade"
                         elif institutional_quality:
                             quality_path = "institutional"
-                        elif technical_quality:
-                            quality_path = "technical"
                         elif daily_strategy_quality:
                             quality_path = "daily_strategy"
 
-                    if not execute_buy:
-                        print(f"⚠️ BUY signal filtered - no quality path met:")
-                        print(f"   Signal: conf={signal_confidence:.3f}, votes={buy_votes}")
-                        print(f"   Exceptional: {exceptional_quality} (conf≥0.80 + consensus/institutional)")
-                        print(f"   Consensus: {consensus_quality} (2+ votes + conf≥0.60 + volume/trend/RSI)")
-                        print(f"   Institutional: {institutional_quality} (backed + conf≥0.65 + volume/RSI)")
-                        print(f"   Technical: {technical_quality} (conf≥0.60 + RSI/support + all confirmations)")
-                        print(f"   Confirmations: vol={volume_confirmed}, trend={trend_confirmed}, RSI={good_rsi}, price={price_action_good}")
-                    else:
                         # Calculate dynamic position size with institutional methods
                         volatility = signal.get('market_conditions', {}).get('volatility', 0.02)
                         total_balance = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
