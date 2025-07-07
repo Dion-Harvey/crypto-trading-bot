@@ -811,16 +811,17 @@ def run_continuously(interval_seconds=60):
         print(f"   📈 Recent Activity: {pnl_summary['recent_trades']} trades (7 days)", flush=True)
         print(f"   🕐 Last Trade: {pnl_summary['last_trade_date']}", flush=True)
 
-        # Show unrealized PnL if holding position
+        # Calculate dynamic daily loss limit based on current portfolio
+        balance = safe_api_call(exchange.fetch_balance)
+        current_price = safe_api_call(exchange.fetch_ticker, 'BTC/USDC')['last']
+        btc_balance = balance['BTC']['free']
+        total_portfolio_value = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
+
+        # Show unrealized PnL if holding position (now that current_price and btc_balance are defined)
         if holding_position and entry_price and entry_price > 0:
             unrealized = calculate_unrealized_pnl(current_price, entry_price, btc_balance)
             print(f"   💎 UNREALIZED: ${unrealized['unrealized_pnl_usd']:.2f} ({unrealized['unrealized_pnl_pct']:+.2f}%)", flush=True)
             print(f"   📍 Position: {unrealized['btc_amount']:.6f} BTC @ ${unrealized['entry_price']:.2f} → ${unrealized['current_price']:.2f}", flush=True)
-
-        # Calculate dynamic daily loss limit based on current portfolio
-        balance = safe_api_call(exchange.fetch_balance)
-        current_price = safe_api_call(exchange.fetch_ticker, 'BTC/USDC')['last']
-        total_portfolio_value = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
 
         dynamic_daily_loss_limit = calculate_dynamic_daily_loss_limit(total_portfolio_value)
 
