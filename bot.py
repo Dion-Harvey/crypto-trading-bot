@@ -5,7 +5,7 @@
 # Copyright (c) 2025 Dion Harvey. All rights reserved.
 # Licensed under Custom License - see LICENSE file for details.
 #
-# INSTITUTIONAL-GRADE BTC TRADING BOT
+# AGGRESSIVE DAY TRADING BTC BOT
 # Features: Multi-Strategy Ensemble, Machine Learning, Kelly Criterion,
 # Value-at-Risk Analysis, Advanced Risk Management
 #
@@ -888,7 +888,7 @@ def run_continuously(interval_seconds=60):
 
                 print(f"🔄 SYNC: No significant BTC position detected", flush=True)
 
-            # Initialize strategy ensemble with institutional-grade analysis
+            # Initialize strategy ensemble with day trading analysis
             base_strategy = MultiStrategyOptimized()
             enhanced_strategy = EnhancedMultiStrategy()
             hybrid_strategy = AdvancedHybridStrategy()
@@ -898,7 +898,7 @@ def run_continuously(interval_seconds=60):
             enhanced_signal = enhanced_strategy.get_enhanced_consensus_signal(df)
             adaptive_signal = hybrid_strategy.get_adaptive_signal(df)
 
-            # Get institutional-grade signal analysis
+            # Get institutional-grade signal analysis (used alongside day trading strategies)
             total_balance = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
             institutional_signal = institutional_manager.get_institutional_signal(
                 df, portfolio_value=total_balance, base_position_size=optimized_config['trading']['base_amount_usd']
@@ -2721,7 +2721,7 @@ def display_institutional_analysis_safe(inst_data):
 
 if __name__ == "__main__":
     try:
-        print("🚀 Starting INSTITUTIONAL-GRADE BTC Trading Bot...")
+        print("🚀 Starting AGGRESSIVE DAY TRADING BTC Bot...")
         print("🏛️ Features: Hedge Fund Strategies, Machine Learning, Kelly Criterion, VaR Risk Management")
         print("📊 Strategies: Enhanced RSI, Bollinger Bands, Mean Reversion, VWAP + ML Ensemble")
         print("🧠 Institutional: Market Regime Detection, Cross-Asset Correlation, Kelly Sizing")
