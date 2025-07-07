@@ -17,24 +17,84 @@ def log_trade(action, symbol, amount, price, balance):
         writer.writerow([datetime.utcnow(), action, symbol, amount, price, balance])
 
 def calculate_daily_pnl():
-    pnl = 0
-    with open(LOG_FILE, mode='r') as file:
-        reader = csv.DictReader(file)
-        trades = list(reader)
-        today = datetime.utcnow().date()
-        buys = []
+    """Calculate daily PnL from completed trades - improved with better error handling"""
+    try:
+        if not os.path.exists(LOG_FILE):
+            return 0.0
+        
+        pnl = 0.0
+        with open(LOG_FILE, mode='r') as file:
+            reader = csv.DictReader(file)
+            trades = list(reader)
+            
+        if not trades:
+            return 0.0
+            
+        # Use local time for date comparison (more reliable)
+        today = datetime.now().date()
+        
+        # Track positions with entry prices and amounts
+        positions = []  # [(entry_price, amount), ...]
+        
         for row in trades:
-            timestamp = datetime.fromisoformat(row["timestamp"]).date()
-            if timestamp != today:
-                continue
-            if row["action"] == "BUY":
-                buys.append(float(row["price"]))
-            elif row["action"] == "SELL" and buys:
-                entry = buys.pop(0)  # FIFO
-                exit_price = float(row["price"])
+            try:
+                # Parse timestamp - handle both UTC and local formats
+                timestamp_str = row["timestamp"].replace('Z', '').replace('+00:00', '')
+                if 'T' in timestamp_str:
+                    # ISO format
+                    timestamp = datetime.fromisoformat(timestamp_str.split('+')[0])
+                else:
+                    # Space-separated format
+                    timestamp = datetime.strptime(timestamp_str.split('.')[0], '%Y-%m-%d %H:%M:%S')
+                
+                trade_date = timestamp.date()
+                
+                # Only process today's trades
+                if trade_date != today:
+                    continue
+                
+                action = row["action"].upper()
+                price = float(row["price"])
                 amount = float(row["amount"])
-                pnl += (exit_price - entry) * amount
-    return pnl
+                
+                if action == "BUY":
+                    # Add to positions
+                    positions.append((price, amount))
+                    print(f"📊 Daily PnL: Added BUY position ${price:.2f} x {amount:.6f} BTC", flush=True)
+                    
+                elif action in ["SELL", "PARTIAL_SELL_25%", "PARTIAL_SELL_50%"] and positions:
+                    # Calculate PnL for this sell using FIFO
+                    remaining_sell_amount = amount
+                    
+                    while remaining_sell_amount > 0 and positions:
+                        entry_price, position_amount = positions[0]
+                        
+                        if position_amount <= remaining_sell_amount:
+                            # Sell entire position
+                            trade_pnl = (price - entry_price) * position_amount
+                            pnl += trade_pnl
+                            remaining_sell_amount -= position_amount
+                            positions.pop(0)  # Remove fully sold position
+                            print(f"📊 Daily PnL: SELL {position_amount:.6f} BTC @ ${price:.2f} (entry: ${entry_price:.2f}) = ${trade_pnl:.2f}", flush=True)
+                        else:
+                            # Partial sell
+                            trade_pnl = (price - entry_price) * remaining_sell_amount
+                            pnl += trade_pnl
+                            # Update remaining position
+                            positions[0] = (entry_price, position_amount - remaining_sell_amount)
+                            print(f"📊 Daily PnL: Partial SELL {remaining_sell_amount:.6f} BTC @ ${price:.2f} (entry: ${entry_price:.2f}) = ${trade_pnl:.2f}", flush=True)
+                            remaining_sell_amount = 0
+                            
+            except (ValueError, KeyError, IndexError) as e:
+                print(f"⚠️ Error parsing trade row: {e} - Row: {row}", flush=True)
+                continue
+        
+        print(f"📊 Daily PnL Calculation Complete: ${pnl:.2f} from {len([t for t in trades if datetime.fromisoformat(t['timestamp'].replace('Z', '').replace('+00:00', '').split('+')[0] if 'T' in t['timestamp'] else t['timestamp']).date() == today])} today's trades", flush=True)
+        return pnl
+        
+    except Exception as e:
+        print(f"❌ Error calculating daily PnL: {e}", flush=True)
+        return 0.0
 
 def generate_performance_report():
     """Generate comprehensive CSV performance report - appends to same file"""
@@ -255,3 +315,142 @@ def log_message(message):
             f.write(formatted_message + "\n")
     except:
         pass  # Don't fail if we can't write to log file
+
+def calculate_total_pnl_and_summary():
+    """Calculate comprehensive PnL including unrealized gains and recent activity"""
+    try:
+        if not os.path.exists(LOG_FILE):
+            return {
+                'daily_realized_pnl': 0.0,
+                'total_realized_pnl': 0.0,
+                'recent_trades': 0,
+                'last_trade_date': 'Never',
+                'summary': 'No trades found'
+            }
+        
+        with open(LOG_FILE, mode='r') as file:
+            reader = csv.DictReader(file)
+            trades = list(reader)
+            
+        if not trades:
+            return {
+                'daily_realized_pnl': 0.0,
+                'total_realized_pnl': 0.0,
+                'recent_trades': 0,
+                'last_trade_date': 'Never',
+                'summary': 'No trades in log'
+            }
+        
+        today = datetime.now().date()
+        daily_pnl = 0.0
+        total_pnl = 0.0
+        recent_trades = 0
+        last_trade_date = None
+        
+        # Track all positions for total PnL calculation
+        all_positions = []
+        daily_positions = []
+        
+        for row in trades:
+            try:
+                # Parse timestamp
+                timestamp_str = row["timestamp"].replace('Z', '').replace('+00:00', '')
+                if 'T' in timestamp_str:
+                    timestamp = datetime.fromisoformat(timestamp_str.split('+')[0])
+                else:
+                    timestamp = datetime.strptime(timestamp_str.split('.')[0], '%Y-%m-%d %H:%M:%S')
+                
+                trade_date = timestamp.date()
+                if last_trade_date is None or trade_date > last_trade_date:
+                    last_trade_date = trade_date
+                
+                # Count recent trades (last 7 days)
+                days_ago = (today - trade_date).days
+                if days_ago <= 7:
+                    recent_trades += 1
+                
+                action = row["action"].upper()
+                price = float(row["price"])
+                amount = float(row["amount"])
+                
+                if action == "BUY":
+                    all_positions.append((price, amount))
+                    if trade_date == today:
+                        daily_positions.append((price, amount))
+                        
+                elif action in ["SELL", "PARTIAL_SELL_25%", "PARTIAL_SELL_50%"]:
+                    # Calculate total PnL
+                    remaining_amount = amount
+                    while remaining_amount > 0 and all_positions:
+                        entry_price, pos_amount = all_positions[0]
+                        if pos_amount <= remaining_amount:
+                            total_pnl += (price - entry_price) * pos_amount
+                            remaining_amount -= pos_amount
+                            all_positions.pop(0)
+                        else:
+                            total_pnl += (price - entry_price) * remaining_amount
+                            all_positions[0] = (entry_price, pos_amount - remaining_amount)
+                            remaining_amount = 0
+                    
+                    # Calculate daily PnL
+                    if trade_date == today:
+                        remaining_amount = amount
+                        while remaining_amount > 0 and daily_positions:
+                            entry_price, pos_amount = daily_positions[0]
+                            if pos_amount <= remaining_amount:
+                                daily_pnl += (price - entry_price) * pos_amount
+                                remaining_amount -= pos_amount
+                                daily_positions.pop(0)
+                            else:
+                                daily_pnl += (price - entry_price) * remaining_amount
+                                daily_positions[0] = (entry_price, pos_amount - remaining_amount)
+                                remaining_amount = 0
+                                
+            except Exception as e:
+                continue
+        
+        summary = f"Last trade: {last_trade_date}, Recent trades (7d): {recent_trades}, Total realized: ${total_pnl:.2f}"
+        
+        return {
+            'daily_realized_pnl': daily_pnl,
+            'total_realized_pnl': total_pnl,
+            'recent_trades': recent_trades,
+            'last_trade_date': str(last_trade_date) if last_trade_date else 'Never',
+            'summary': summary
+        }
+        
+    except Exception as e:
+        return {
+            'daily_realized_pnl': 0.0,
+            'total_realized_pnl': 0.0,
+            'recent_trades': 0,
+            'last_trade_date': 'Error',
+            'summary': f'Error calculating PnL: {e}'
+        }
+
+def calculate_unrealized_pnl(current_price, entry_price=None, btc_amount=0):
+    """Calculate unrealized PnL for current BTC position"""
+    try:
+        if not entry_price or btc_amount <= 0:
+            return 0.0
+        
+        unrealized_pnl = (current_price - entry_price) * btc_amount
+        unrealized_pct = ((current_price - entry_price) / entry_price) * 100
+        
+        return {
+            'unrealized_pnl_usd': unrealized_pnl,
+            'unrealized_pnl_pct': unrealized_pct,
+            'entry_price': entry_price,
+            'current_price': current_price,
+            'btc_amount': btc_amount,
+            'current_value': current_price * btc_amount
+        }
+    except Exception as e:
+        return {
+            'unrealized_pnl_usd': 0.0,
+            'unrealized_pnl_pct': 0.0,
+            'entry_price': 0.0,
+            'current_price': current_price,
+            'btc_amount': 0.0,
+            'current_value': 0.0
+        }

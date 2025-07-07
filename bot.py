@@ -799,10 +799,23 @@ def run_continuously(interval_seconds=60):
         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"🕐 Loop Started: {current_time}", flush=True)
 
-        from log_utils import calculate_daily_pnl
+        from log_utils import calculate_daily_pnl, calculate_total_pnl_and_summary, calculate_unrealized_pnl
 
+        # Enhanced PnL reporting with more details
         daily_pnl = calculate_daily_pnl()
-        print(f"📉 Daily PnL: ${daily_pnl:.2f}", flush=True)
+        pnl_summary = calculate_total_pnl_and_summary()
+
+        print(f"📊 TRADING PERFORMANCE:", flush=True)
+        print(f"   📉 Daily PnL (realized): ${daily_pnl:.2f}", flush=True)
+        print(f"   💰 Total PnL (realized): ${pnl_summary['total_realized_pnl']:.2f}", flush=True)
+        print(f"   📈 Recent Activity: {pnl_summary['recent_trades']} trades (7 days)", flush=True)
+        print(f"   🕐 Last Trade: {pnl_summary['last_trade_date']}", flush=True)
+
+        # Show unrealized PnL if holding position
+        if holding_position and entry_price and entry_price > 0:
+            unrealized = calculate_unrealized_pnl(current_price, entry_price, btc_balance)
+            print(f"   💎 UNREALIZED: ${unrealized['unrealized_pnl_usd']:.2f} ({unrealized['unrealized_pnl_pct']:+.2f}%)", flush=True)
+            print(f"   📍 Position: {unrealized['btc_amount']:.6f} BTC @ ${unrealized['entry_price']:.2f} → ${unrealized['current_price']:.2f}", flush=True)
 
         # Calculate dynamic daily loss limit based on current portfolio
         balance = safe_api_call(exchange.fetch_balance)
