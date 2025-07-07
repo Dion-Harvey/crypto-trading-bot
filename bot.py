@@ -1086,16 +1086,30 @@ def run_continuously(interval_seconds=60):
             # Enhanced confidence thresholds with quality analysis
             base_min_confidence = strategy_config['confidence_threshold']
 
-            # 🎯 QUALITY-BASED CONFIDENCE ADJUSTMENT
+            # 🎯 DAY TRADER MOMENTUM BOOST - Quick reaction to strong moves
+            momentum_boost = 0.0
+            if len(df) >= 5:
+                # Check for strong recent momentum (last 3-5 minutes)
+                recent_change = (df['close'].iloc[-1] - df['close'].iloc[-3]) / df['close'].iloc[-3]
+                if abs(recent_change) > 0.005:  # 0.5% move in 3 minutes
+                    momentum_boost = 0.05  # Lower threshold by 5% for momentum trades
+                    if signal['action'] == 'BUY' and recent_change < -0.008:  # Strong dip
+                        momentum_boost = 0.10  # Even more aggressive on dips
+                        log_message(f"🚀 DAY TRADER DIP-BUY BOOST: {recent_change:.2%} recent drop detected")
+                    elif signal['action'] == 'SELL' and recent_change > 0.008:  # Strong rally
+                        momentum_boost = 0.10  # Aggressive profit-taking
+                        log_message(f"📈 DAY TRADER RALLY-SELL BOOST: {recent_change:.2%} recent rally detected")
+
+            # 🎯 QUALITY-BASED CONFIDENCE ADJUSTMENT - More lenient for day trading
             if 'quality_analysis' in signal:
                 quality_score = signal['quality_analysis']['overall_quality_score']
-                if quality_score >= 0.8:
-                    # Exceptional quality - lower threshold for high-quality signals
-                    min_confidence = base_min_confidence * 0.85
-                    log_message(f"🎯 High-quality signal detected - lowering confidence threshold to {min_confidence:.3f}")
-                elif quality_score < 0.6:
-                    # Poor quality - raise threshold significantly
-                    min_confidence = base_min_confidence * 1.5
+                if quality_score >= 0.7:
+                    # Good quality - lower threshold slightly
+                    min_confidence = base_min_confidence * 0.90
+                    log_message(f"🎯 Good quality signal detected - lowering confidence threshold to {min_confidence:.3f}")
+                elif quality_score < 0.4:
+                    # Poor quality - raise threshold moderately
+                    min_confidence = base_min_confidence * 1.2
                     log_message(f"⚠️ Low-quality signal detected - raising confidence threshold to {min_confidence:.3f}")
                 else:
                     min_confidence = base_min_confidence
@@ -1106,15 +1120,18 @@ def run_continuously(interval_seconds=60):
                 min_confidence = base_min_confidence
                 signal_confidence_to_use = signal.get('confidence', 0.0)
 
-            # Adjust threshold based on market conditions
+            # Apply momentum boost
+            min_confidence = max(0.35, min_confidence - momentum_boost)  # Never go below 35%
+
+            # Adjust threshold based on market conditions - More aggressive for day trading
             if 'market_conditions' in signal:
                 mc = signal['market_conditions']
                 # Lower threshold for high-confidence dip/peak trades
                 if (signal['action'] == 'BUY' and mc.get('strong_downtrend', False)) or \
                    (signal['action'] == 'SELL' and mc.get('strong_uptrend', False)):
-                    min_confidence = min_confidence * 0.9  # Only 10% lower for extreme conditions
+                    min_confidence = min_confidence * 0.85  # More aggressive 15% lower
                 elif mc.get('is_high_volatility', False):
-                    min_confidence = min_confidence * 1.3  # 30% higher in high volatility
+                    min_confidence = min_confidence * 1.15  # Only 15% higher (was 30%)
 
             print(f"   Required confidence: {min_confidence:.3f}", flush=True)
             print(f"   Signal confidence: {signal_confidence_to_use:.3f}", flush=True)
@@ -1149,43 +1166,33 @@ def run_continuously(interval_seconds=60):
                     buy_votes = signal.get('vote_count', {}).get('BUY', 1)
                     signal_confidence = signal_confidence_to_use  # Use quality-enhanced confidence
 
-                    # 🎯 QUALITY GATE - Only proceed with high-quality signals
+                    # 🎯 RELAXED QUALITY GATE - Day trader approach
                     quality_gate_passed = True
                     if 'quality_analysis' in signal:
-                        quality_filters = signal['quality_analysis']['filters_passed']
-                        if not quality_filters.get('minimum_quality', False):
+                        quality_score = signal.get('quality_score', 0.5)
+                        # More lenient quality requirement for day trading
+                        if quality_score < 0.4:  # Only reject truly poor signals
                             quality_gate_passed = False
-                            print("❌ BUY signal rejected: Failed minimum quality gate")
-                            print(f"   Quality score: {signal.get('quality_score', 0):.3f} (minimum: 0.60)")
+                            print("❌ BUY signal rejected: Extremely poor quality signal")
+                            print(f"   Quality score: {quality_score:.3f} (minimum: 0.40)")
 
-                    # 🎯 MA TREND ALIGNMENT FILTER (Your suggestion: EMA 7 > EMA 25 > EMA 99)
-                    ma_trend_confirmed = True
+                    # 🎯 MA TREND ALIGNMENT FILTER - Relaxed for day trading
+                    ma_trend_confirmed = True  # Default to True for more aggressive trading
                     market_config = optimized_config.get('market_filters', {})
-                    if market_config.get('ma_trend_filter_enabled', True):
+                    if market_config.get('require_ma_alignment', False):  # Only if explicitly required
                         if len(df) >= 99:
                             ema_7 = df['close'].ewm(span=7).mean().iloc[-1]
                             ema_25 = df['close'].ewm(span=25).mean().iloc[-1]
                             ema_99 = df['close'].ewm(span=99).mean().iloc[-1]
 
                             if signal['action'] == 'BUY':
-                                ma_trend_confirmed = ema_7 > ema_25 > ema_99
+                                # More lenient: only need short-term trend alignment
+                                ma_trend_confirmed = ema_7 > ema_25  # Just need 7 > 25, not all three
                                 if not ma_trend_confirmed:
-                                    log_message(f"❌ MA Trend Filter: EMA7({ema_7:.2f}) > EMA25({ema_25:.2f}) > EMA99({ema_99:.2f}) not aligned for BUY")
+                                    log_message(f"❌ MA Trend Filter: EMA7({ema_7:.2f}) > EMA25({ema_25:.2f}) not aligned for BUY")
 
-                    # 🎯 RSI RANGE FILTER (Your suggestion: avoid RSI 40-60 choppy range)
+                    # 🎯 RSI RANGE FILTER - Disabled for day trading (set in config)
                     rsi_range_ok = True
-                    if market_config.get('rsi_range_filter', {}).get('enabled', False):
-                        rsi_avoid_min = market_config['rsi_range_filter']['avoid_range_min']
-                        rsi_avoid_max = market_config['rsi_range_filter']['avoid_range_max']
-
-                        # Calculate current RSI
-                        if len(df) >= 14:
-                            from success_rate_enhancer import calculate_rsi
-                            current_rsi = calculate_rsi(df['close']).iloc[-1]
-
-                            if rsi_avoid_min <= current_rsi <= rsi_avoid_max:
-                                rsi_range_ok = False
-                                log_message(f"❌ RSI Range Filter: RSI({current_rsi:.1f}) in choppy range {rsi_avoid_min}-{rsi_avoid_max}")
 
                     if not quality_gate_passed:
                         continue  # Skip this signal entirely
@@ -1251,56 +1258,54 @@ def run_continuously(interval_seconds=60):
                                 price_action_good = True  # Override resistance near recent highs
                                 log_message("🎯 HIGH/LOW analysis overriding traditional price action filter")
 
-                    # INTELLIGENT BUY criteria - Adaptive thresholds based on signal quality
-                    high_confidence = signal_confidence >= 0.60  # Slightly relaxed from 0.65
+                    # INTELLIGENT BUY criteria - Day Trader Optimized
+                    high_confidence = signal_confidence >= 0.55  # Day trader threshold
                     strong_consensus = buy_votes >= 2  # 2+ strategies agreeing is good
-                    exceptional_confidence = signal_confidence >= 0.80  # For truly exceptional signals
+                    exceptional_confidence = signal_confidence >= 0.70  # Exceptional for day trading
 
-                    good_rsi = any(rsi < 35 for rsi in rsi_values) if rsi_values else signal_confidence > 0.7
+                    good_rsi = any(rsi < 40 for rsi in rsi_values) if rsi_values else signal_confidence > 0.6  # More lenient RSI
                     institutional_backed = 'institutional_analysis' in signal and signal.get('risk_score', 'HIGH') != 'HIGH'
 
                     # Support/resistance or dip-buying signals
                     support_signal = any('support' in individual.get('reason', '').lower()
                                        for individual in signal.get('individual_signals', {}).values())
 
-                    # ADAPTIVE QUALITY GATES - Multiple paths to execution
+                    # DAY TRADER QUALITY GATES - More aggressive, fewer filters
 
-                    # Path 1: Exceptional signal (high confidence overrides most filters)
-                    exceptional_quality = exceptional_confidence and (strong_consensus or institutional_backed)
+                    # Path 1: Strong confidence signal (day trader primary path)
+                    day_trader_primary = (signal_confidence >= 0.58 and buy_votes >= 2)
 
-                    # Path 2: Strong consensus with good conditions
-                    consensus_quality = (strong_consensus and high_confidence and
-                                       (volume_confirmed or trend_confirmed or good_rsi))
+                    # Path 2: Technical setup with good momentum
+                    momentum_trade = (signal_confidence >= 0.55 and (good_rsi or support_signal) and
+                                    (volume_confirmed or trend_confirmed))
 
                     # Path 3: Institutional backing with reasonable confidence
-                    institutional_quality = (institutional_backed and signal_confidence >= 0.65 and
-                                           (volume_confirmed or good_rsi))
+                    institutional_quality = (institutional_backed and signal_confidence >= 0.58)
 
-                    # Path 4: Technical setup quality (for lower consensus but good technicals)
-                    technical_quality = (high_confidence and (good_rsi or support_signal) and
-                                       volume_confirmed and trend_confirmed and price_action_good)
+                    # Path 4: Exceptional signal (high confidence overrides filters)
+                    exceptional_quality = exceptional_confidence
 
-                    # Path 5: Daily high/low strategy quality (NEW)
+                    # Path 5: Daily high/low strategy quality
                     daily_strategy_quality = False
                     if 'daily_strategy_override' in signal:
                         daily_override = signal['daily_strategy_override']
-                        daily_strategy_quality = (daily_override['confidence'] > 0.75 and
+                        daily_strategy_quality = (daily_override['confidence'] > 0.65 and
                                                  daily_override['action'] == 'BUY')
                         if daily_strategy_quality:
                             log_message(f"✅ Daily Strategy Quality: {daily_override['strategy']} (conf: {daily_override['confidence']:.3f})")
 
-                    # Execute if ANY quality path is met
-                    execute_buy = (exceptional_quality or consensus_quality or
-                                 institutional_quality or technical_quality or daily_strategy_quality)
+                    # Execute if ANY quality path is met (day trader approach)
+                    execute_buy = (day_trader_primary or momentum_trade or
+                                 institutional_quality or exceptional_quality or daily_strategy_quality)
 
                     if not execute_buy:
                         print(f"⚠️ BUY signal filtered - no quality path met:")
                         print(f"   Signal: conf={signal_confidence:.3f}, votes={buy_votes}")
-                        print(f"   Exceptional: {exceptional_quality} (conf≥0.80 + consensus/institutional)")
-                        print(f"   Consensus: {consensus_quality} (2+ votes + conf≥0.60 + volume/trend/RSI)")
-                        print(f"   Institutional: {institutional_quality} (backed + conf≥0.65 + volume/RSI)")
-                        print(f"   Technical: {technical_quality} (conf≥0.60 + RSI/support + all confirmations)")
-                        print(f"   Daily Strategy: {daily_strategy_quality} (high-confidence daily high/low strategy)")
+                        print(f"   Day Trader Primary: {day_trader_primary} (conf≥0.58 + 2+ votes)")
+                        print(f"   Momentum Trade: {momentum_trade} (conf≥0.55 + RSI/support + volume/trend)")
+                        print(f"   Institutional: {institutional_quality} (backed + conf≥0.58)")
+                        print(f"   Exceptional: {exceptional_quality} (conf≥0.70)")
+                        print(f"   Daily Strategy: {daily_strategy_quality} (high-confidence daily strategy)")
                         print(f"   Confirmations: vol={volume_confirmed}, trend={trend_confirmed}, RSI={good_rsi}, price={price_action_good}")
                         if 'daily_strategy_override' in signal:
                             daily_override = signal['daily_strategy_override']

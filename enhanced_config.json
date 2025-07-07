@@ -1,4 +1,5 @@
 {
+  "_comment": "🎯 DAY TRADER OPTIMIZED CONFIGURATION - More aggressive thresholds for active trading",
   "trading": {
     "symbol": "BTC/USDC",
     "base_amount_usd": 12,
@@ -6,7 +7,7 @@
     "max_amount_usd": 20,
     "use_intelligent_orders": true,
     "limit_order_timeout_seconds": 45,
-    "trade_cooldown_seconds": 1800,
+    "trade_cooldown_seconds": 600,
     "position_sizing_mode": "percentage",
     "base_position_pct": 0.25,
     "min_position_pct": 0.15,
@@ -36,9 +37,9 @@
     "trend_reversal_exit": true
   },
   "strategy_parameters": {
-    "confidence_threshold": 0.75,
-    "high_volatility_confidence_multiplier": 1.6,
-    "extreme_condition_confidence_multiplier": 0.5,
+    "confidence_threshold": 0.58,
+    "high_volatility_confidence_multiplier": 1.4,
+    "extreme_condition_confidence_multiplier": 0.7,
     "min_consensus_votes": 5,
     "strong_consensus_votes": 6,
     "rsi_period": 14,
@@ -78,12 +79,12 @@
     "bollinger_squeeze_detection": true,
     "macd_divergence_detection": true,
     "ma_trend_filter_enabled": true,
-    "require_ma_alignment": true,
+    "require_ma_alignment": false,
     "rsi_range_filter": {
-      "enabled": true,
+      "enabled": false,
       "avoid_range_min": 40,
       "avoid_range_max": 60,
-      "description": "Avoid trading in RSI 40-60 range (choppy markets)"
+      "description": "Disabled for more active day trading"
     },
     "minimum_trend_strength": 0.02,
     "multi_timeframe_required": true
@@ -100,8 +101,8 @@
       "min_factor": 0.7,
       "max_factor": 1.5,
       "scaling_multiplier": 1.5,
-      "high_confidence_threshold": 0.75,
-      "exceptional_confidence_threshold": 0.85
+      "high_confidence_threshold": 0.65,
+      "exceptional_confidence_threshold": 0.75
     },
     "loss_adjustment": {
       "enabled": true,
