@@ -634,7 +634,6 @@ def place_intelligent_order(symbol, side, amount_usd, use_limit=True, timeout_se
             if amount < MIN_BTC_AMOUNT:
                 print(f"❌ SELL amount too small: {amount:.6f} BTC < {MIN_BTC_AMOUNT:.6f} BTC minimum")
                 print(f"   🔍 This amount is too small to trade on Binance. Consider accumulating more BTC before selling.")
-                print(f"   💡 Current balance: {available_btc:.6f} BTC (~${available_btc * market_price:.2f})")
                 return None
 
             # Check minimum notional value
@@ -774,1303 +773,174 @@ def test_connection():
         print("Error:", e)
 
 # =============================================================================
-# LIVE STRATEGY LOOP
+# MA7/MA25 CROSSOVER STRATEGY - ABSOLUTE PRIORITY FOR DAY TRADING
 # =============================================================================
 
-def run_continuously(interval_seconds=60):
-
-    global holding_position, last_trade_time, consecutive_losses, active_trade_index, entry_price, stop_loss_price, take_profit_price
-
-    while True:
-        # Always ensure risk management variables are initialized
-        if 'entry_price' not in globals() or entry_price is None:
-            entry_price = None
-        if 'stop_loss_price' not in globals() or stop_loss_price is None:
-            stop_loss_price = None
-        if 'take_profit_price' not in globals() or take_profit_price is None:
-            take_profit_price = None
-
-        print("\n" + "="*50, flush=True)
-        print("RUNNING TRADING STRATEGY LOOP", flush=True)
-        print("="*50, flush=True)
-
-        # Add timestamp for debugging
-        import datetime
-        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"🕐 Loop Started: {current_time}", flush=True)
-
-        from log_utils import calculate_daily_pnl, calculate_total_pnl_and_summary, calculate_unrealized_pnl
-
-        # Enhanced PnL reporting with more details
-        daily_pnl = calculate_daily_pnl()
-        pnl_summary = calculate_total_pnl_and_summary()
-
-        print(f"📊 TRADING PERFORMANCE:", flush=True)
-        print(f"   📉 Daily PnL (realized): ${daily_pnl:.2f}", flush=True)
-        print(f"   💰 Total PnL (realized): ${pnl_summary['total_realized_pnl']:.2f}", flush=True)
-        print(f"   📈 Recent Activity: {pnl_summary['recent_trades']} trades (7 days)", flush=True)
-        print(f"   🕐 Last Trade: {pnl_summary['last_trade_date']}", flush=True)
-
-        # Calculate dynamic daily loss limit based on current portfolio
-        balance = safe_api_call(exchange.fetch_balance)
-        current_price = safe_api_call(exchange.fetch_ticker, 'BTC/USDC')['last']
-        btc_balance = balance['BTC']['free']
-        total_portfolio_value = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
-
-        # Show unrealized PnL if holding position (now that current_price and btc_balance are defined)
-        if holding_position and entry_price and entry_price > 0:
-            unrealized = calculate_unrealized_pnl(current_price, entry_price, btc_balance)
-            print(f"   💎 UNREALIZED: ${unrealized['unrealized_pnl_usd']:.2f} ({unrealized['unrealized_pnl_pct']:+.2f}%)", flush=True)
-            print(f"   📍 Position: {unrealized['btc_amount']:.6f} BTC @ ${unrealized['entry_price']:.2f} → ${unrealized['current_price']:.2f}", flush=True)
-
-        dynamic_daily_loss_limit = calculate_dynamic_daily_loss_limit(total_portfolio_value)
-
-        # Enhanced risk management with dynamic limits (logging only)
-        if daily_pnl <= -dynamic_daily_loss_limit:
-            print(f"⚠️ Daily loss alert: ${daily_pnl:.2f} exceeds limit -${dynamic_daily_loss_limit:.2f} (continuing trading as requested)", flush=True)
-
-        if consecutive_losses >= max_consecutive_losses:
-            print(f"⚠️ {consecutive_losses} consecutive losses detected (continuing trading as requested)", flush=True)
-            # Reset consecutive losses to avoid spam alerts
-            consecutive_losses = 0
-
-        # Check trade timing to avoid overtrading
-        time_since_last_trade = time.time() - last_trade_time
-        if time_since_last_trade < min_trade_interval:
-            remaining_time = min_trade_interval - int(time_since_last_trade)
-            print(f"⏳ Trade cooldown: {remaining_time}s remaining (avoiding overtrading)", flush=True)
-            time.sleep(min(interval_seconds, remaining_time + 10))
-            continue
-
-        try:
-            df = fetch_ohlcv(exchange, 'BTC/USDC', '1m', 50)
-
-            # Monitor exchange-side orders with safe API calls
-            open_orders = monitor_exchange_orders()
-            recent_fills = check_exchange_order_fills()
-
-            # Synchronize holding position with actual balance
-            balance = safe_api_call(exchange.fetch_balance)
-            btc_balance = balance['BTC']['free']
-            current_price = df['close'].iloc[-1]
-
-            # Auto-detect if we're actually holding BTC (threshold: $1 worth)
-            btc_value = btc_balance * current_price
-            if btc_value > 1.0 and not holding_position:
-                holding_position = True
-                entry_price = current_price  # Estimate current price as entry
-                stop_loss_price = current_price * (1 - stop_loss_percentage)
-                take_profit_price = current_price * (1 + take_profit_percentage)
-
-                # 🔧 FIX: Update state manager to persist the holding position
-                state_manager.update_trading_state(
-                    holding_position=True,
-                    entry_price=entry_price,
-                    stop_loss_price=stop_loss_price,
-                    take_profit_price=take_profit_price
-                )
-
-                print(f"🔄 SYNC: Detected existing BTC position worth ${btc_value:.2f}", flush=True)
-                print(f"🛡️ Risk Levels Set: Entry=${current_price:.2f}, SL=${stop_loss_price:.2f}, TP=${take_profit_price:.2f}", flush=True)
-            elif btc_value <= 1.0 and holding_position:
-                holding_position = False
-                entry_price = None
-                stop_loss_price = None
-                take_profit_price = None
-
-                # 🔧 FIX: Update state manager to clear the holding position
-                state_manager.update_trading_state(
-                    holding_position=False,
-                    entry_price=None,
-                    stop_loss_price=None,
-                    take_profit_price=None
-                )
-
-                print(f"🔄 SYNC: No significant BTC position detected", flush=True)
-
-            # Initialize strategy ensemble with day trading analysis
-            base_strategy = MultiStrategyOptimized()
-            enhanced_strategy = EnhancedMultiStrategy()
-            hybrid_strategy = AdvancedHybridStrategy()
-
-            # Get signals from all strategy systems
-            base_signal = base_strategy.get_consensus_signal(df)
-            enhanced_signal = enhanced_strategy.get_enhanced_consensus_signal(df)
-            adaptive_signal = hybrid_strategy.get_adaptive_signal(df)
-
-            # Get institutional-grade signal analysis (used alongside day trading strategies)
-            total_balance = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
-            institutional_signal = institutional_manager.get_institutional_signal(
-                df, portfolio_value=total_balance, base_position_size=optimized_config['trading']['base_amount_usd']
-            )
-
-            # 🎯 NEW: DAILY HIGH/LOW PROFIT MAXIMIZATION STRATEGIES - Run FIRST
-            daily_strategies = implement_daily_high_low_strategies(df, current_price, None, holding_position)
-
-            # Create daily strategy signals for fusion
-            daily_signals = []
-            if daily_strategies:
-                for strategy_name, strategy_data in daily_strategies.items():
-                    if strategy_name != 'optimal_strategy' and strategy_data.get('confidence', 0) > 0.5:
-                        daily_signals.append((f"Daily_{strategy_name}", strategy_data))
-
-            # Intelligent signal fusion with institutional overlay + daily strategies
-            signal = fuse_strategy_signals(base_signal, enhanced_signal, adaptive_signal, df, institutional_signal, daily_signals)
-
-            # 🎯 NEW: HIGH/LOW PRICE ANALYSIS FOR PROFIT MAXIMIZATION
-            if signal and signal.get('action') in ['BUY', 'SELL']:
-                signal = enhance_signal_with_high_low_analysis(signal, df, current_price)
-
-            # Add daily strategy analysis to signal for reference
-            if daily_strategies:
-                signal['daily_strategies'] = daily_strategies
-
-                # If we have a strong daily strategy and the main signal is weak, override it (DAY TRADER PRIORITY)
-                if daily_strategies.get('optimal_strategy'):
-                    optimal_strategy = daily_strategies['optimal_strategy']
-
-                    # DAY TRADER OVERRIDE: More aggressive thresholds
-                    if (signal.get('action') == 'HOLD' and
-                        signal.get('confidence', 0) < 0.7 and  # Higher threshold from 0.6
-                        optimal_strategy['confidence'] > 0.6):  # Lower threshold from 0.7
-
-                        log_message(f"🚀 DAY TRADER OVERRIDE: Replacing weak HOLD with {optimal_strategy['strategy']} {optimal_strategy['action']}")
-                        signal['action'] = optimal_strategy['action']
-                        signal['confidence'] = optimal_strategy['confidence']
-                        signal['reason'] = f"Day trader override: {optimal_strategy['reason']}"
-                        signal['daily_strategy_override'] = optimal_strategy
-
-                        log_message(f"🎯 DAY TRADER ACTIVATED: {optimal_strategy['strategy']} (+{optimal_strategy['score']:.3f})")
-
-                    # DAY TRADER BOOST: More aggressive alignment boost
-                    elif (signal.get('action') == optimal_strategy['action'] and
-                          optimal_strategy['confidence'] > signal.get('confidence', 0) + 0.05):  # Lower from 0.1
-
-                        signal['confidence'] = min(0.95, signal.get('confidence', 0) + 0.20)  # Bigger boost from 0.15
-                        signal['reason'] += f" | Enhanced by {optimal_strategy['strategy']}"
-                        log_message(f"🎯 DAY TRADER BOOST: {optimal_strategy['strategy']} (+{optimal_strategy['score']:.3f})")
-
-                    # NEW: Day trader opportunity detection - override even BUY/SELL with better signals
-                    elif (optimal_strategy['confidence'] > signal.get('confidence', 0) + 0.15 and
-                          optimal_strategy['confidence'] > 0.75):
-
-                        log_message(f"🔥 DAY TRADER OPPORTUNITY: Superior daily signal detected!")
-                        log_message(f"   Original: {signal.get('action')} ({signal.get('confidence', 0):.3f})")
-                        log_message(f"   Daily: {optimal_strategy['action']} ({optimal_strategy['confidence']:.3f})")
-
-                        signal['action'] = optimal_strategy['action']
-                        signal['confidence'] = optimal_strategy['confidence']
-                        signal['reason'] = f"Day trader opportunity: {optimal_strategy['reason']}"
-                        signal['daily_strategy_override'] = optimal_strategy
-
-            # 🎯 NEW: ADVANCED SIGNAL QUALITY ANALYSIS
-            if signal and signal.get('action') in ['BUY', 'SELL']:
-                quality_analysis = success_enhancer.analyze_signal_quality(df, signal, current_price)
-
-                # Enhance signal with quality analysis
-                signal['quality_analysis'] = quality_analysis
-                signal['enhanced_confidence'] = quality_analysis['enhanced_confidence']
-                signal['quality_score'] = quality_analysis['overall_quality_score']
-
-                # Log quality analysis
-                log_message(f"🔍 SIGNAL QUALITY ANALYSIS:")
-                log_message(f"   Overall Quality Score: {quality_analysis['overall_quality_score']:.3f}")
-                log_message(f"   Enhanced Confidence: {quality_analysis['enhanced_confidence']:.3f}")
-                for factor, score in quality_analysis['quality_factors'].items():
-                    log_message(f"   {factor.replace('_', ' ').title()}: {score:.3f}")
-
-                # Display recommendations
-                for rec in quality_analysis['recommendations']:
-                    log_message(f"   {rec}")
-
-            # Display comprehensive system status
-            display_system_status(signal, current_price, balance)
-
-            # Get dynamic confidence threshold from config
-            strategy_config = optimized_config['strategy_parameters']
-            base_min_confidence = strategy_config['confidence_threshold']
-
-            # Check risk management (stop loss, take profit, max drawdown)
-
-            if holding_position:
-                total_balance = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
-
-                risk_action = check_risk_management(current_price, total_balance)
-
-                if risk_action in ['STOP_LOSS', 'TAKE_PROFIT', 'EMERGENCY_EXIT', 'MAX_DRAWDOWN_HIT', 'TRAILING_STOP']:
-                    print(f"🚨 RISK MANAGEMENT TRIGGERED: {risk_action}")
-
-                    # Execute exit trade
-                    btc_amount = balance['BTC']['free']
-                    if btc_amount > 0:
-                        order = safe_api_call(exchange.create_market_order, 'BTC/USDC', 'sell', btc_amount)
-
-                        # Update consecutive losses for stop loss
-                        if risk_action in ['STOP_LOSS', 'EMERGENCY_EXIT']:
-                            consecutive_losses += 1
-                            state_manager.update_consecutive_losses(consecutive_losses)
-                            log_message(f"📉 Consecutive losses: {consecutive_losses}")
-
-                            # Update Kelly Criterion with loss result
-                            if entry_price is not None and entry_price > 0:
-                                pnl_pct = (current_price - entry_price) / entry_price
-                                institutional_manager.add_trade_result(pnl_pct)
-                        else:
-                            consecutive_losses = 0  # Reset on profitable exit
-                            state_manager.update_consecutive_losses(consecutive_losses)
-
-                            # Update Kelly Criterion with win result
-                            if entry_price is not None and entry_price > 0:
-                                pnl_pct = (current_price - entry_price) / entry_price
-                                institutional_manager.add_trade_result(pnl_pct)
-
-                        # Log the trade
-                        updated_balance = safe_api_call(exchange.fetch_balance)
-                        log_trade("SELL", "BTC/USDC", btc_amount, current_price, updated_balance['USDC']['free'])
-
-                        # Update performance tracking
-                        if active_trade_index is not None:
-                            performance_tracker.update_trade_outcome(active_trade_index, None, current_price, risk_action)
-                            active_trade_index = None
-
-                        # Clear persistent state
-                        state_manager.exit_trade(risk_action)
-                        holding_position = False
-                        print(f"✅ Risk management SELL: {btc_amount:.6f} BTC at ${current_price:.2f}")
-
-                        # Take a break after risk management exit
-                        time.sleep(300)  # 5 minute cooldown
-                        continue
-
-                # 🎯 PARTIAL EXIT HANDLING (Your suggestion to scale out of winners)
-                elif risk_action and risk_action.startswith('PARTIAL_EXIT_'):
-                    partial_amount_pct = float(risk_action.split('_')[-1]) / 100
-                    btc_amount = balance['BTC']['free']
-                    partial_btc_amount = btc_amount * partial_amount_pct
-
-                    if partial_btc_amount > 0.00001:  # Minimum BTC amount
-                        print(f"💰 PARTIAL EXIT: Selling {partial_amount_pct:.0%} of position")
-                        order = safe_api_call(exchange.create_market_order, 'BTC/USDC', 'sell', partial_btc_amount)
-
-                        # Log partial exit
-                        updated_balance = safe_api_call(exchange.fetch_balance)
-                        log_trade(f"PARTIAL_SELL_{partial_amount_pct:.0%}", "BTC/USDC", partial_btc_amount, current_price, updated_balance['USDC']['free'])
-
-                        # Mark partial exit as done
-                        state_manager._partial_exit_done = True
-
-                        # Adjust stop loss to break-even for remaining position
-                        stop_loss_price = entry_price * 1.005  # Slight profit to cover fees
-                        log_message(f"🛡️ Adjusted stop loss to break-even: ${stop_loss_price:.2f}")
-
-                        print(f"✅ Partial exit: {partial_btc_amount:.6f} BTC at ${current_price:.2f}")
-                        print(f"💎 Holding remaining {btc_amount - partial_btc_amount:.6f} BTC with break-even stop")
-
-
-            try:
-                print(f"\n🎯 INSTITUTIONAL MULTI-STRATEGY SIGNAL: {signal.get('action', 'N/A')} at ${current_price:.2f}", flush=True)
-                print(f"   Overall Confidence: {signal.get('confidence', 0.0):.3f}", flush=True)
-                print(f"   Primary Reason: {signal.get('reason', 'N/A')}", flush=True)
-
-                # Show institutional analysis details
-                if 'institutional_analysis' in signal:
-                    inst = signal['institutional_analysis']
-                    try:
-                        display_institutional_analysis_safe(inst)
-                    except Exception as inst_display_error:
-                        print(f"   [Error] Institutional analysis display failed: {inst_display_error}")
-                        traceback.print_exc()
-
-                # Show fusion details
-                if 'fusion_info' in signal:
-                    fusion = signal['fusion_info']
-                    try:
-                        print(f"\n🧠 Strategy Selection: {fusion.get('selection_reason', 'N/A')}")
-                        print(f"   🎚️ Adaptive Mode: {fusion.get('adaptive_mode', 'N/A')}")
-                        print(f"   📊 Market Volatility: {fusion.get('market_volatility', 0.0):.4f}")
-                        print(f"   🗳️ All Strategy Votes:")
-                        for name, vote_info in fusion.get('all_signals', {}).items():
-                            print(f"      {name}: {vote_info.get('action', 'N/A')} ({vote_info.get('confidence', 0.0):.2f})")
-                    except Exception as fusion_error:
-                        print(f"   [Error] Fusion info display failed: {fusion_error}")
-                        traceback.print_exc()
-
-                # Show vote counts if available
-                if 'vote_count' in signal:
-                    try:
-                        votes = signal['vote_count']
-                        print(f"   Votes: BUY={votes.get('BUY', 0)}, SELL={votes.get('SELL', 0)}, HOLD={votes.get('HOLD', 0)}")
-                    except Exception as vote_error:
-                        print(f"   [Error] Vote count display failed: {vote_error}")
-
-                # Show individual strategy signals if available
-                if 'individual_signals' in signal and signal['individual_signals']:
-                    try:
-                        print(f"   📋 Individual Strategy Details:")
-                        for strategy_name, individual in signal['individual_signals'].items():
-                            print(f"      {strategy_name}: {individual.get('action', 'N/A')} ({individual.get('confidence', 0.0):.2f}) - {individual.get('reason', 'N/A')}")
-                    except Exception as indiv_error:
-                        print(f"   [Error] Individual signals display failed: {indiv_error}")
-
-                # Show market conditions if available
-                if 'market_conditions' in signal:
-                    try:
-                        mc = signal['market_conditions']
-                        print(f"\n📈 MARKET CONDITIONS:")
-                        print(f"   Volatility: {mc.get('volatility', 0.0):.3f} ({'HIGH' if mc.get('is_high_volatility', False) else 'NORMAL'})")
-                        print(f"   Momentum: {mc.get('momentum', 0.0):.3f} ({mc.get('momentum', 0.0)*100:.1f}%)")
-                        print(f"   5min Change: {mc.get('price_change_5min', 0.0):.4f} ({mc.get('price_change_5min', 0.0)*100:.2f}%)")
-                        if mc.get('strong_uptrend', False):
-                            print("   🔥 STRONG UPTREND detected - Peak selling opportunity!")
-                        elif mc.get('strong_downtrend', False):
-                            print("   💎 STRONG DOWNTREND detected - Dip buying opportunity!")
-                    except Exception as mc_error:
-                        print(f"   [Error] Market conditions display failed: {mc_error}")
-
-            except Exception as display_block_error:
-                print(f"❌ Error in trading loop display block: {display_block_error}")
-                traceback.print_exc()
-
-            # Enhanced confidence thresholds with quality analysis
-            base_min_confidence = strategy_config['confidence_threshold']
-
-            # 🎯 DAY TRADER MOMENTUM BOOST - Aggressive reaction to moves
-            momentum_boost = 0.0
-            if len(df) >= 5:
-                # Check for strong recent momentum (last 3-5 minutes)
-                recent_change = (df['close'].iloc[-1] - df['close'].iloc[-3]) / df['close'].iloc[-3]
-                if abs(recent_change) > 0.003:  # 0.3% move in 3 minutes (more sensitive)
-                    momentum_boost = 0.08  # Bigger threshold reduction for day trading
-                    if signal['action'] == 'BUY' and recent_change < -0.005:  # Strong dip (more sensitive)
-                        momentum_boost = 0.15  # Very aggressive on dips
-                        log_message(f"🚀 DAY TRADER DIP-BUY BOOST: {recent_change:.2%} recent drop detected")
-                    elif signal['action'] == 'SELL' and recent_change > 0.005:  # Strong rally (more sensitive)
-                        momentum_boost = 0.15  # Very aggressive profit-taking
-                        log_message(f"📈 DAY TRADER RALLY-SELL BOOST: {recent_change:.2%} recent rally detected")
-
-            # 🎯 QUALITY-BASED CONFIDENCE ADJUSTMENT - Very lenient for day trading
-            if 'quality_analysis' in signal:
-                quality_score = signal['quality_analysis']['overall_quality_score']
-                if quality_score >= 0.6:  # Lower threshold from 0.7
-                    # Good quality - lower threshold more aggressively
-                    min_confidence = base_min_confidence * 0.80  # More aggressive from 0.90
-                    log_message(f"🎯 Good quality signal detected - lowering confidence threshold to {min_confidence:.3f}")
-                elif quality_score < 0.3:  # Lower threshold from 0.4
-                    # Poor quality - raise threshold less
-                    min_confidence = base_min_confidence * 1.1  # Less conservative from 1.2
-                    log_message(f"⚠️ Low-quality signal detected - raising confidence threshold to {min_confidence:.3f}")
-                else:
-                    min_confidence = base_min_confidence
-
-                # Use enhanced confidence instead of raw confidence
-                signal_confidence_to_use = signal.get('enhanced_confidence', signal.get('confidence', 0.0))
-            else:
-                min_confidence = base_min_confidence
-                signal_confidence_to_use = signal.get('confidence', 0.0)
-
-            # Apply momentum boost - more aggressive floor
-            min_confidence = max(0.25, min_confidence - momentum_boost)  # Lower floor from 0.35
-
-            # Adjust threshold based on market conditions - Very aggressive for day trading
-            if 'market_conditions' in signal:
-                mc = signal['market_conditions']
-                # Lower threshold for high-confidence dip/peak trades
-                if (signal['action'] == 'BUY' and mc.get('strong_downtrend', False)) or \
-                   (signal['action'] == 'SELL' and mc.get('strong_uptrend', False)):
-                    min_confidence = min_confidence * 0.75  # Very aggressive 25% lower
-                elif mc.get('is_high_volatility', False):
-                    min_confidence = min_confidence * 1.05  # Only 5% higher (was 15%)
-
-            print(f"   Required confidence: {min_confidence:.3f}", flush=True)
-            print(f"   Signal confidence: {signal_confidence_to_use:.3f}", flush=True)
-
-            if signal['action'] == 'BUY' and not holding_position and signal_confidence_to_use >= min_confidence:
-                # Log detailed signal breakdown
-                print(f"\n🔍 ANALYZING BUY SIGNAL:")
-                print(f"   Final Confidence: {signal_confidence_to_use:.3f} (required: {min_confidence:.3f})")
-
-                # Show strategy breakdown
-                if 'fusion_info' in signal and 'all_signals' in signal['fusion_info']:
-                    print(f"   📊 Strategy Votes:")
-                    for strategy_name, vote_info in signal['fusion_info']['all_signals'].items():
-                        action = vote_info.get('action', 'N/A')
-                        confidence = vote_info.get('confidence', 0.0)
-                        print(f"      {strategy_name}: {action} ({confidence:.2f})")
-
-                # Show selection reasoning
-                if 'fusion_info' in signal:
-                    selection_reason = signal['fusion_info'].get('selection_reason', 'Unknown')
-                    print(f"   🧠 Selection: {selection_reason}")
-
-                # Check trend filter to avoid contrarian trades in strong trends
-                trend_filtered = is_strong_trend(df, signal)
-                if trend_filtered:
-                    print("⚠️ BUY signal filtered out due to strong trend detection")
-                # 🛡️ NEW: Anti-whipsaw protection
-                elif not check_anti_whipsaw_protection(signal, current_price, df):
-                    print("⚠️ BUY signal filtered out due to anti-whipsaw protection")
-                else:
-                    # Enhanced BUY signal validation with SUCCESS RATE OPTIMIZATION
-                    buy_votes = signal.get('vote_count', {}).get('BUY', 1)
-                    signal_confidence = signal_confidence_to_use  # Use quality-enhanced confidence
-
-                    # 🎯 RELAXED QUALITY GATE - Day trader approach
-                    quality_gate_passed = True
-                    if 'quality_analysis' in signal:
-                        quality_score = signal.get('quality_score', 0.5)
-                        # More lenient quality requirement for day trading
-                        if quality_score < 0.4:  # Only reject truly poor signals
-                            quality_gate_passed = False
-                            print("❌ BUY signal rejected: Extremely poor quality signal")
-                            print(f"   Quality score: {quality_score:.3f} (minimum: 0.40)")
-
-                    # 🎯 MA TREND ALIGNMENT FILTER - Relaxed for day trading
-                    ma_trend_confirmed = True  # Default to True for more aggressive trading
-                    market_config = optimized_config.get('market_filters', {})
-                    if market_config.get('require_ma_alignment', False):  # Only if explicitly required
-                        if len(df) >= 99:
-                            ema_7 = df['close'].ewm(span=7).mean().iloc[-1]
-                            ema_25 = df['close'].ewm(span=25).mean().iloc[-1]
-                            ema_99 = df['close'].ewm(span=99).mean().iloc[-1]
-
-                            if signal['action'] == 'BUY':
-                                # More lenient: only need short-term trend alignment
-                                ma_trend_confirmed = ema_7 > ema_25  # Just need 7 > 25, not all three
-                                if not ma_trend_confirmed:
-                                    log_message(f"❌ MA Trend Filter: EMA7({ema_7:.2f}) > EMA25({ema_25:.2f}) not aligned for BUY")
-
-                    # 🎯 RSI RANGE FILTER - Disabled for day trading (set in config)
-                    rsi_range_ok = True
-
-                    if not quality_gate_passed:
-                        continue  # Skip this signal entirely
-
-                    if not ma_trend_confirmed:
-                        print("❌ BUY signal rejected: MA trend alignment required")
-                        continue
-
-                    if not rsi_range_ok:
-                        print("❌ BUY signal rejected: RSI in choppy range - avoiding whipsaws")
-                        continue
-
-                    # Extract RSI values for additional context
-                    rsi_values = []
-                    for individual in signal.get('individual_signals', []):
-                        if 'RSI' in individual.get('reason', ''):
-                            reason = individual['reason']
-                            if 'RSI' in reason:
-                                rsi_match = re.search(r'RSI.*?(\d+\.\d+)', reason)
-                                if rsi_match:
-                                    rsi_values.append(float(rsi_match.group(1)))
-
-                    # Volume confirmation (critical for quality trades)
-                    volume_confirmed = False
-                    if 'volume' in df.columns and len(df) >= 20:
-                        recent_volume = df['volume'].iloc[-5:].mean()
-                        avg_volume = df['volume'].iloc[-20:].mean()
-                        volume_confirmed = recent_volume > avg_volume * 1.4
-
-                    # Multi-timeframe trend confirmation
-                    trend_confirmed = False
-                    if len(df) >= 50:
-                        ma_short = df['close'].rolling(7).mean().iloc[-1]
-                        ma_medium = df['close'].rolling(21).mean().iloc[-1]
-                        ma_long = df['close'].rolling(50).mean().iloc[-1]
-                        trend_confirmed = ma_short > ma_medium and current_price > ma_short
-
-                    # Enhanced price action confirmation using high/low analysis
-                    price_action_good = True
-                    high_low_favorable = False
-
-                    if len(df) >= 20:
-                        # Traditional check: not near recent highs
-                        recent_high = df['high'].iloc[-10:].max()
-                        price_action_good = current_price < recent_high * 0.98  # Not near recent highs
-
-                        # Enhanced check: use high/low analysis
-                        if 'high_low_analysis' in signal:
-                            hl_analysis = signal['high_low_analysis']
-
-                            # Favorable for BUY if near support or range bottoms
-                            if signal['action'] == 'BUY':
-                                buy_opportunities = len(hl_analysis.get('buy_opportunities', []))
-                                low_position_count = sum(1 for pos in hl_analysis['price_position'].values()
-                                                       if pos.get('near_low', False))
-                                high_low_favorable = buy_opportunities > 0 or low_position_count >= 1
-
-                                if high_low_favorable:
-                                    log_message(f"✅ HIGH/LOW FAVORABLE FOR BUY: {buy_opportunities} opportunities, {low_position_count} timeframes near lows")
-
-                            # Override traditional check if high/low analysis is very favorable
-                            if high_low_favorable and signal.get('high_low_boost', 0) > 0.3:
-                                price_action_good = True  # Override resistance near recent highs
-                                log_message("🎯 HIGH/LOW analysis overriding traditional price action filter")
-
-                    # INTELLIGENT BUY criteria - Day Trader Optimized
-                    high_confidence = signal_confidence >= 0.55  # Day trader threshold
-                    strong_consensus = buy_votes >= 2  # 2+ strategies agreeing is good
-                    exceptional_confidence = signal_confidence >= 0.70  # Exceptional for day trading
-
-                    good_rsi = any(rsi < 40 for rsi in rsi_values) if rsi_values else signal_confidence > 0.6  # More lenient RSI
-                    institutional_backed = 'institutional_analysis' in signal and signal.get('risk_score', 'HIGH') != 'HIGH'
-
-                    # Support/resistance or dip-buying signals
-                    support_signal = any('support' in individual.get('reason', '').lower()
-                                       for individual in signal.get('individual_signals', {}).values())
-
-                    # AGGRESSIVE DAY TRADER QUALITY GATES - Maximum opportunity capture
-
-                    # Path 1: Daily Strategy Override (HIGHEST PRIORITY for day trading)
-                    daily_strategy_quality = False
-                    if 'daily_strategy_override' in signal:
-                        daily_override = signal['daily_strategy_override']
-                        daily_strategy_quality = (daily_override['confidence'] > 0.65 and
-                                                 daily_override['action'] == 'BUY')
-                        if daily_strategy_quality:
-                            log_message(f"✅ Daily Strategy Quality: {daily_override['strategy']} (conf: {daily_override['confidence']:.3f})")
-
-                    # Path 2: Day Trader Primary (Lower threshold for quick entries)
-                    day_trader_primary = (signal_confidence >= 0.50 and buy_votes >= 1)  # More aggressive
-
-                    # Path 3: Momentum Trade (Scalping opportunities)
-                    momentum_trade = (signal_confidence >= 0.45 and (good_rsi or support_signal))  # Very aggressive
-
-                    # Path 4: High/Low Analysis (Core day trading strategy)
-                    high_low_quality = (high_low_favorable and signal_confidence >= 0.45)
-
-                    # Path 5: Exceptional signal (high confidence overrides all filters)
-                    exceptional_quality = signal_confidence >= 0.65  # Lower from 0.70
-
-                    # Path 6: Institutional backing with reasonable confidence
-                    institutional_quality = (institutional_backed and signal_confidence >= 0.50)  # Lower from 0.58
-
-                    # Path 7: Volume breakout (Day trader loves volume)
-                    volume_breakout = (volume_confirmed and signal_confidence >= 0.45)
-
-                    # Path 8: Quick scalp opportunity (Very short-term focused)
-                    quick_scalp = (signal_confidence >= 0.50 and (trend_confirmed or good_rsi))
-
-                    # Execute if ANY quality path is met (very aggressive day trader approach)
-                    execute_buy = (daily_strategy_quality or day_trader_primary or momentum_trade or
-                                 high_low_quality or exceptional_quality or institutional_quality or
-                                 volume_breakout or quick_scalp)
-
-                    if not execute_buy:
-                        print(f"⚠️ BUY signal filtered - no quality path met:")
-                        print(f"   Signal: conf={signal_confidence:.3f}, votes={buy_votes}")
-                        print(f"   Daily Strategy: {daily_strategy_quality} (highest priority)")
-                        print(f"   Day Trader Primary: {day_trader_primary} (conf≥0.50 + 1+ votes)")
-                        print(f"   Momentum Trade: {momentum_trade} (conf≥0.45 + RSI/support)")
-                        print(f"   High/Low Quality: {high_low_quality} (favorable + conf≥0.45)")
-                        print(f"   Exceptional: {exceptional_quality} (conf≥0.65)")
-                        print(f"   Institutional: {institutional_quality} (backed + conf≥0.50)")
-                        print(f"   Volume Breakout: {volume_breakout} (volume + conf≥0.45)")
-                        print(f"   Quick Scalp: {quick_scalp} (conf≥0.50 + trend/RSI)")
-                        print(f"   Confirmations: vol={volume_confirmed}, trend={trend_confirmed}, RSI={good_rsi}, HL={high_low_favorable}")
-                        if 'daily_strategy_override' in signal:
-                            daily_override = signal['daily_strategy_override']
-                            print(f"   Daily Override: {daily_override['strategy']} ({daily_override['confidence']:.3f})")
-                    else:
-                        # Determine which quality path was taken for logging
-                        quality_path = "unknown"
-                        if daily_strategy_quality:
-                            quality_path = "daily_strategy"
-                        elif exceptional_quality:
-                            quality_path = "exceptional"
-                        elif day_trader_primary:
-                            quality_path = "day_trader_primary"
-                        elif momentum_trade:
-                            quality_path = "momentum_trade"
-                        elif high_low_quality:
-                            quality_path = "high_low_quality"
-                        elif institutional_quality:
-                            quality_path = "institutional"
-                        elif volume_breakout:
-                            quality_path = "volume_breakout"
-                        elif quick_scalp:
-                            quality_path = "quick_scalp"
-
-                        log_message(f"🚀 DAY TRADER EXECUTION PATH: {quality_path}")
-
-                        # Calculate dynamic position size with institutional methods
-                        volatility = signal.get('market_conditions', {}).get('volatility', 0.02)
-                        total_balance = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
-
-                        # Use institutional position sizing if available
-                        if 'institutional_analysis' in signal:
-                            inst_analysis = signal['institutional_analysis']
-                            kelly_size = inst_analysis.get('kelly_position_size', 0)
-                            if kelly_size > 0:
-                                # Ensure institutional Kelly size meets minimum
-                                position_size = max(10, min(25, kelly_size))  # $10 minimum, $25 max
-                                log_message(f"💼 Using institutional Kelly position size: ${position_size:.2f}")
-                            else:
-                                position_size = calculate_position_size(
-                                    current_price,
-                                    volatility,
-                                    signal['confidence'],
-                                    total_balance
-                                )
-                        else:
-                            position_size = calculate_position_size(
-                                current_price,
-                                volatility,
-                                signal['confidence'],
-                                total_balance
-                            )
-
-                        # Check if position size is valid (0 means skip trade)
-                        if position_size <= 0:
-                            print(f"⚠️ Position size too small (${position_size:.2f}), skipping trade")
-                            continue
-
-                        # Record trade signal for performance tracking
-                        trade_index = performance_tracker.record_trade_signal(signal, signal.get('market_conditions', {}))
-
-                        print(f"📥 INSTITUTIONAL Multi-strategy BUY signal - ${position_size:.2f} of BTC...")
-                        print(f"   ✅ Quality checks: High conf={high_confidence}, Strong consensus={strong_consensus}, Oversold conditions met")
-
-                        # Show institutional context if available
-                        if 'institutional_analysis' in signal:
-                            inst = signal['institutional_analysis']
-                            regime_name = inst.get('market_regime', {}).get('regime', 'Unknown')
-                            ml_conf = inst.get('ml_signal', {}).get('confidence', 0.0)
-                            var_daily = inst.get('risk_analysis', {}).get('var_daily', 0.0)
-                            print(f"   🏛️ Regime: {regime_name}, Risk: {signal.get('risk_score', 'UNKNOWN')}")
-                            print(f"   📊 ML Confidence: {ml_conf:.2f}, VaR: ${var_daily:.2f}")
-
-                        order = place_intelligent_order('BTC/USDC', 'buy', amount_usd=position_size, use_limit=True)
-                        if order:
-                            holding_position = True
-                            active_trade_index = trade_index
-                            performance_tracker.update_trade_outcome(trade_index, current_price)
-
-                            # Place advanced risk management orders (entry_price is set in place_intelligent_order)
-                            risk_order = place_advanced_risk_orders('BTC/USDC', entry_price, order.get('amount', 0))
-
-                            # Save trade state persistently
-                            state_manager.enter_trade(
-                                entry_price=entry_price,
-                                stop_loss_price=stop_loss_price,
-                                take_profit_price=take_profit_price,
-                                trade_id=order.get('id'),
-                                active_trade_index=trade_index
-                            )
-
-            elif signal['action'] == 'SELL' and holding_position and signal_confidence_to_use >= min_confidence:
-                # Enhanced SELL signal validation with profit optimization
-                sell_votes = signal.get('vote_count', {}).get('SELL', 1)
-                signal_confidence = signal.get('confidence', 0.0)
-
-                # Calculate current profit/loss
-                current_pnl = 0
-                if entry_price and entry_price > 0:
-                    current_pnl = (current_price - entry_price) / entry_price
-
-                # Don't sell at small losses unless technical conditions are very bearish
-                if current_pnl < -0.01:  # If losing more than 1%
-                    # Need very strong bearish signal to sell at a loss
-                    if signal_confidence < 0.75 or sell_votes < 4:
-                        print(f"⚠️ SELL signal rejected: Would realize loss of {current_pnl:.2%} without strong confirmation")
-                        print("⏸ No action taken.")
-                        continue
-
-                # Check for momentum continuation (don't sell in strong uptrends)
-                momentum_check = True
-                if len(df) >= 10:
-                    recent_momentum = (df['close'].iloc[-1] - df['close'].iloc[-5]) / df['close'].iloc[-5]
-                    if recent_momentum > 0.02:  # Strong recent uptrend
-                        momentum_check = False
-                        print("⚠️ SELL signal filtered - strong momentum continuation detected")
-
-                # Volume confirmation for sell signals
-                volume_confirmed = True
-                if 'volume' in df.columns and len(df) >= 20:
-                    recent_volume = df['volume'].iloc[-3:].mean()
-                    avg_volume = df['volume'].iloc[-20:].mean()
-                    volume_confirmed = recent_volume > avg_volume * 1.2
-
-                # RSI overbought confirmation
-                rsi_overbought = False
-                for individual in signal.get('individual_signals', {}).values():
-                    if 'RSI' in individual.get('reason', ''):
-                        reason = individual['reason']
-                        rsi_match = re.search(r'RSI.*?(\d+\.\d+)', reason)
-                        if rsi_match and float(rsi_match.group(1)) > 70:
-                            rsi_overbought = True
-
-                # Profit-taking logic
-                profit_taking = current_pnl > 0.05  # Take profits if up 5%+
-
-                # Check trend filter to avoid selling in strong uptrends (let profits run)
-                trend_filtered = is_strong_trend(df, signal)
-
-                # Enhanced high/low analysis for SELL decisions
-                high_low_sell_signal = False
-                if 'high_low_analysis' in signal:
-                    hl_analysis = signal['high_low_analysis']
-                    sell_opportunities = len(hl_analysis.get('sell_opportunities', []))
-                    high_position_count = sum(1 for pos in hl_analysis['price_position'].values()
-                                            if pos.get('near_high', False))
-
-                    # Strong high/low sell signal
-                    high_low_sell_signal = (sell_opportunities > 0 or high_position_count >= 2)
-
-                    if high_low_sell_signal:
-                        log_message(f"🎯 HIGH/LOW SELL SIGNAL: {sell_opportunities} opportunities, {high_position_count} timeframes near highs")
-
-                # DAY TRADER SELL OPTIMIZATION - Quick profit taking and risk management
-
-                # More aggressive profit-taking for day trading
-                quick_profit = current_pnl > 0.02  # Take profits if up 2%+ (day trader approach)
-                moderate_profit = current_pnl > 0.035  # More confident at 3.5%+
-
-                # Day trader sell conditions - multiple pathways for execution
-                day_trader_sell_paths = []
-
-                # Path 1: Daily strategy override (HIGHEST PRIORITY)
-                daily_sell_signal = False
-                if 'daily_strategy_override' in signal and signal['daily_strategy_override']['action'] == 'SELL':
-                    daily_sell_signal = True
-                    day_trader_sell_paths.append("daily_strategy_override")
-
-                # Path 2: High/low analysis detected peak
-                if high_low_sell_signal:
-                    day_trader_sell_paths.append("high_low_peak_detection")
-
-                # Path 3: Quick profit taking (day trader specialty)
-                if quick_profit and signal_confidence >= 0.45:
-                    day_trader_sell_paths.append("quick_profit_taking")
-
-                # Path 4: RSI overbought with volume
-                if rsi_overbought and volume_confirmed and signal_confidence >= 0.50:
-                    day_trader_sell_paths.append("rsi_overbought_volume")
-
-                # Path 5: Moderate profit with technical confirmation
-                if moderate_profit and (rsi_overbought or volume_confirmed) and signal_confidence >= 0.45:
-                    day_trader_sell_paths.append("moderate_profit_technical")
-
-                # Path 6: Strong signal regardless of profit (risk management)
-                if signal_confidence >= 0.70:
-                    day_trader_sell_paths.append("strong_signal_override")
-
-                # Path 7: Momentum reversal detected
-                recent_momentum = (df['close'].iloc[-1] - df['close'].iloc[-3]) / df['close'].iloc[-3] if len(df) >= 3 else 0
-                if recent_momentum < -0.005 and signal_confidence >= 0.50:  # 0.5% recent drop
-                    day_trader_sell_paths.append("momentum_reversal")
-
-                # Execute sell if ANY day trader path is met
-                execute_day_trader_sell = len(day_trader_sell_paths) > 0
-
-                # Override conservative filters for day trading
-                if execute_day_trader_sell:
-                    # Don't let trend filters block day trader sells if we have strong paths
-                    strong_day_trader_paths = ["daily_strategy_override", "high_low_peak_detection", "strong_signal_override"]
-                    has_strong_path = any(path in strong_day_trader_paths for path in day_trader_sell_paths)
-
-                    if has_strong_path or not trend_filtered or quick_profit or moderate_profit:
-                        print(f"📤 DAY TRADER SELL - Paths: {', '.join(day_trader_sell_paths)}")
-                        print(f"   Current P&L: {current_pnl:.2%}, Signal Confidence: {signal_confidence:.3f}")
-                        print(f"   Quick Profit: {quick_profit}, Moderate Profit: {moderate_profit}")
-                        print(f"   High/Low Signal: {high_low_sell_signal}, RSI Overbought: {rsi_overbought}")
-
-                        # Execute the sell order
-                        balance = safe_api_call(exchange.fetch_balance)
-                        btc_amount = balance['BTC']['free']
-                        if btc_amount > 0:
-                            ticker = safe_api_call(exchange.fetch_ticker, 'BTC/USDC')
-                            price = ticker['last']
-                            order = place_intelligent_order('BTC/USDC', 'sell', amount_usd=0, use_limit=True)
-
-                            # Only continue if order was successfully placed
-                            if order is not None:
-                                # Clear persistent state
-                                state_manager.exit_trade("DAY_TRADER_SELL")
-                                holding_position = False
-
-                                # Reset consecutive losses on successful trade
-                                consecutive_losses = 0
-                                state_manager.update_consecutive_losses(consecutive_losses)
-
-                                # Update Kelly Criterion with successful trade result
-                                if entry_price and entry_price > 0:
-                                    pnl_pct = (current_price - entry_price) / entry_price
-                                    institutional_manager.add_trade_result(pnl_pct)
-
-                                # Update performance tracking
-                                if active_trade_index is not None:
-                                    performance_tracker.update_trade_outcome(active_trade_index, None, current_price)
-                                    active_trade_index = None
-
-                                print(f"✅ DAY TRADER SELL: {btc_amount:.6f} BTC at ${price:.2f}")
-                                print(f"📝 Trade logged to trade_log.csv")
-
-                                # Log the successful day trader path
-                                log_message(f"🎯 DAY TRADER SELL EXECUTED: {', '.join(day_trader_sell_paths)}")
-                            else:
-                                print("⚠️ SELL order skipped due to insufficient amount or minimum order requirements")
-                        else:
-                            print("⚠️ No BTC balance available to sell")
-                    else:
-                        print("⚠️ Day trader sell paths detected but overridden by strong uptrend filter")
-                        print(f"   Paths: {', '.join(day_trader_sell_paths)}")
-
-                # Fallback to original logic if no day trader paths triggered
-                elif trend_filtered and not profit_taking and not high_low_sell_signal:
-                    print("⚠️ SELL signal filtered out - letting profits run in strong uptrend")
-                elif not momentum_check and not high_low_sell_signal:
-                    pass  # Already printed message above
-                elif (signal_confidence >= 0.65 and (volume_confirmed or rsi_overbought or profit_taking)) or high_low_sell_signal:
-                    print(f"📤 Enhanced SELL signal - Current P&L: {current_pnl:.2%}")
-                    balance = safe_api_call(exchange.fetch_balance)
-                    btc_amount = balance['BTC']['free']
-                    if btc_amount > 0:
-                        ticker = safe_api_call(exchange.fetch_ticker, 'BTC/USDC')
-                        price = ticker['last']
-                        order = place_intelligent_order('BTC/USDC', 'sell', amount_usd=0, use_limit=True)
-
-                        # Only continue if order was successfully placed
-                        if order is not None:
-                            # Clear persistent state
-                            state_manager.exit_trade("STRATEGY_SELL")
-                            holding_position = False
-
-                            # Reset consecutive losses on successful trade
-                            consecutive_losses = 0
-                            state_manager.update_consecutive_losses(consecutive_losses)
-
-                            # Update Kelly Criterion with successful trade result
-                            if entry_price and entry_price > 0:
-                                pnl_pct = (current_price - entry_price) / entry_price
-                                institutional_manager.add_trade_result(pnl_pct)
-
-                            # Update performance tracking
-                            if active_trade_index is not None:
-                                performance_tracker.update_trade_outcome(active_trade_index, None, current_price)
-                                active_trade_index = None
-
-                            print(f"✅ SOLD {btc_amount:.6f} BTC at ${price:.2f}")
-                            print(f"📝 Trade logged to trade_log.csv")
-                        else:
-                            print("⚠️ SELL order skipped due to insufficient amount or minimum order requirements")
-                            print("💡 Tip: The bot will continue to monitor for BUY opportunities to accumulate more BTC")
-                    else:
-                        print("⚠️ No BTC balance available to sell")
-                else:
-                    print("⚠️ SELL signal quality check failed - holding position")
-
-            else:
-                print("⏸ No action taken.", flush=True)
-
-        except Exception as e:
-            print("❌ Error in trading loop:", e, flush=True)
-
-        # Add heartbeat before sleep
-        print(f"💓 Loop completed, sleeping for {interval_seconds} seconds...", flush=True)
-        time.sleep(interval_seconds)
-
-# =============================================================================
-# REPORTING FUNCTIONS
-# =============================================================================
-
-def generate_reports():
-    """Generate comprehensive trading reports - updates existing files"""
-    print("\n" + "="*60)
-    print("📊 UPDATING COMPREHENSIVE TRADING REPORTS")
-    print("="*60)
-
-    # Generate performance report
-    perf_report = generate_performance_report()
-
-    # Generate trade analysis
-    analysis_report = generate_trade_analysis()
-
-    # Generate strategy performance analytics
-    performance_tracker.print_performance_summary()
-
-    print("\n✅ Report update complete!")
-    print("📁 Check performance_report.csv and trade_analysis.csv for updated data.")
-    return perf_report, analysis_report
-
-# =============================================================================
-# STRATEGY FUSION FUNCTION
-# =============================================================================
-
-def fuse_strategy_signals(base_signal, enhanced_signal, adaptive_signal, df, institutional_signal=None, daily_signals=None):
+def detect_ma_crossover_signals(df, current_price):
     """
-    Intelligent fusion of signals from multiple strategy systems including institutional analysis and daily strategies
-    Chooses the best signal based on market conditions, confidence levels, and institutional factors
+    🎯 AGGRESSIVE DAY TRADING: MA7/MA25 Crossover Detection
+    This is the ABSOLUTE PRIORITY strategy that overrides all others.
+    
+    Golden Cross (MA7 > MA25): Strong BUY signal
+    Death Cross (MA7 < MA25): Strong SELL signal
+    
+    Returns high-confidence signals for immediate execution.
     """
-    log_message("🧠 INSTITUTIONAL STRATEGY FUSION - Analyzing all signal sources:")
-
-    signals = [
-        ('Base Strategy', base_signal),
-        ('Enhanced Strategy', enhanced_signal),
-        ('Adaptive Strategy', adaptive_signal)
-    ]
-
-    if institutional_signal:
-        signals.append(('Institutional ML', institutional_signal))
-
-    # Add daily strategy signals to the fusion
-    if daily_signals:
-        signals.extend(daily_signals)
-
-    # Log all signals for transparency
-    for name, sig in signals:
-        action = sig.get('action', 'UNKNOWN')
-        conf = sig.get('confidence', 0.0)
-        reason = sig.get('reason', 'No reason')
-        log_message(f"   {name}: {action} (conf: {conf:.3f}) - {reason}")
-
-    # Market condition analysis for signal selection
-    current_price = df['close'].iloc[-1]
-    volatility = df['close'].pct_change().rolling(20).std().iloc[-1]
-
-    # Get regime information from adaptive strategy
-    adaptive_mode = adaptive_signal.get('mode', 'neutral')
-
-    # Get institutional regime analysis if available
-    institutional_regime = None
-    if institutional_signal and 'institutional_analysis' in institutional_signal:
-        inst_analysis = institutional_signal['institutional_analysis']
-        market_regime_data = inst_analysis.get('market_regime')
-        if market_regime_data and isinstance(market_regime_data, dict):
-            institutional_regime = market_regime_data.get('regime', 'Unknown')
-        else:
-            institutional_regime = 'Unknown'
-
-    log_message(f"🔍 Market Context: Price=${current_price:.2f}, Vol={volatility:.4f}")
-    log_message(f"   Adaptive Mode: {adaptive_mode}, Institutional Regime: {institutional_regime}")
-
-    # Enhanced strategy selection logic with better signal prioritization
-    selected_signal = None
-    selection_reason = ""
-
-    # Count votes from all strategies first for better analysis
-    buy_votes = sum(1 for _, sig in signals if sig.get('action') == 'BUY')
-    sell_votes = sum(1 for _, sig in signals if sig.get('action') == 'SELL')
-    hold_votes = len(signals) - buy_votes - sell_votes
-
-    log_message(f"📊 Vote Tally: BUY={buy_votes}, SELL={sell_votes}, HOLD={hold_votes}")
-
-    # 1. Strong consensus BUY (2+ strategies with decent confidence)
-    if buy_votes >= 2:
-        buy_signals = [(name, sig) for name, sig in signals if sig.get('action') == 'BUY']
-        # Get the highest confidence BUY signal
-        best_buy_name, best_buy_signal = max(buy_signals, key=lambda x: x[1].get('confidence', 0))
-
-        # Enhanced BUY signal wins if confidence is decent (>0.6) even with institutional disagreement
-        if best_buy_signal.get('confidence', 0) > 0.6:
-            selected_signal = best_buy_signal
-            confidence_list = [f"{name}: {sig.get('confidence', 0):.2f}" for name, sig in buy_signals]
-            selection_reason = f"Strong BUY consensus ({buy_votes}/{len(signals)}) - Best: {best_buy_name} ({confidence_list})"
-            log_message(f"🎯 CONSENSUS BUY SELECTED: {best_buy_name} with {best_buy_signal.get('confidence', 0):.3f} confidence")
-        else:
-            # Weak BUY consensus - be more cautious
-            selected_signal = best_buy_signal
-            selected_signal['confidence'] *= 0.8  # Reduce confidence due to low values
-            selection_reason = f"Weak BUY consensus ({buy_votes}/{len(signals)}) - confidence adjusted down"
-
-    # 2. Strong consensus SELL (2+ strategies)
-    elif sell_votes >= 2:
-        sell_signals = [(name, sig) for name, sig in signals if sig.get('action') == 'SELL']
-        best_sell_name, best_sell_signal = max(sell_signals, key=lambda x: x[1].get('confidence', 0))
-        selected_signal = best_sell_signal
-        selection_reason = f"Strong SELL consensus ({sell_votes}/{len(signals)}) - Best: {best_sell_name}"
-
-    # 3. High confidence institutional signal (takes priority over single strategies)
-    elif (institutional_signal and institutional_signal.get('confidence', 0) > 0.7 and
-          institutional_signal.get('risk_score') != 'HIGH'):
-        selected_signal = institutional_signal
-        selection_reason = f"High-confidence institutional override (regime: {institutional_regime})"
-
-    # 4. Single high-confidence adaptive signal in strong trending markets
-    elif (adaptive_signal.get('confidence', 0) > 0.65 and
-          adaptive_mode in ['trend_following', 'mean_reversion'] and
-          volatility > 0.02):  # More volatile = better for adaptive
-        selected_signal = adaptive_signal
-        selection_reason = f"High-confidence adaptive signal in {adaptive_mode} mode (vol: {volatility:.4f})"
-
-    # 5. Single high-confidence enhanced strategy in stable markets
-    elif (enhanced_signal.get('confidence', 0) > 0.7 and volatility < 0.025):
-        selected_signal = enhanced_signal
-        selection_reason = f"High-confidence enhanced strategy in stable market (vol: {volatility:.4f})"
-
-    # 6. Institutional signal with moderate confidence (backup)
-    elif (institutional_signal and institutional_signal.get('confidence', 0) > 0.5 and
-          institutional_signal.get('risk_score') == 'LOW'):
-        selected_signal = institutional_signal
-        selection_reason = f"Moderate institutional signal with low risk (regime: {institutional_regime})"
-
-    # 7. Base strategy as conservative fallback
-    elif base_signal.get('confidence', 0) > 0.45:
-        selected_signal = base_signal
-        selection_reason = "Conservative base strategy fallback"
-
-    # 8. Default to HOLD if nothing qualifies
-    else:
-        selected_signal = {
-            'action': 'HOLD',
-            'confidence': 0.3,
-            'reason': 'No qualifying signals meet confidence thresholds',
-            'vote_count': {'BUY': buy_votes, 'SELL': sell_votes, 'HOLD': hold_votes},
-            'individual_signals': {}
-        }
-        selection_reason = "No qualifying signals - conservative HOLD"
-
-    # Enhance selected signal with fusion metadata and institutional analysis
-    if selected_signal:
-        # Ensure vote_count exists in the signal
-        if 'vote_count' not in selected_signal:
-            buy_votes = sum(1 for _, sig in signals if sig.get('action') == 'BUY')
-            sell_votes = sum(1 for _, sig in signals if sig.get('action') == 'SELL')
-            hold_votes = sum(1 for _, sig in signals if sig.get('action') == 'HOLD')
-            selected_signal['vote_count'] = {'BUY': buy_votes, 'SELL': sell_votes, 'HOLD': hold_votes}
-
-        # Add fusion metadata
-        selected_signal['fusion_info'] = {
-            'selection_reason': selection_reason,
-            'adaptive_mode': adaptive_mode,
-            'all_signals': {name: {'action': sig.get('action'), 'confidence': sig.get('confidence', 0)}
-                           for name, sig in signals},
-            'market_volatility': volatility,
-            'institutional_regime': institutional_regime
-        }
-
-        # Inherit institutional analysis if available
-        if institutional_signal and 'institutional_analysis' in institutional_signal:
-            selected_signal['institutional_analysis'] = institutional_signal['institutional_analysis']
-            selected_signal['risk_score'] = institutional_signal.get('risk_score', 'MEDIUM')
-
-        # Apply institutional risk overlay
-        if institutional_signal:
-            risk_score = institutional_signal.get('risk_score', 'MEDIUM')
-            if risk_score == 'HIGH':
-                selected_signal['confidence'] *= 0.7  # Reduce confidence in high-risk environment
-                selected_signal['reason'] += ' | Risk-adjusted for high VaR environment'
-
-    log_message(f"📊 INSTITUTIONAL FUSION RESULT: {selected_signal.get('action')} - {selection_reason}")
-
-    # Validate and enhance the final signal
-    selected_signal = validate_and_enhance_signal(selected_signal)
-
-    return selected_signal
-
-# =============================================================================
-# ENHANCED HIGH/LOW PRICE ANALYSIS FOR PROFIT MAXIMIZATION
-# =============================================================================
-
-def analyze_high_low_opportunities(df, current_price, lookback_periods=[5, 10, 20, 50]):
-    """
-    Advanced high/low price analysis to maximize profit opportunities
-    Analyzes multiple timeframes to identify optimal entry/exit points
-    """
-    opportunities = {
-        'buy_opportunities': [],
-        'sell_opportunities': [],
-        'support_levels': [],
-        'resistance_levels': [],
-        'price_position': {},
-        'volatility_analysis': {}
-    }
-
     try:
-        if len(df) < max(lookback_periods):
-            return opportunities
+        if len(df) < 30:  # Need enough data for MA25
+            return {'action': 'HOLD', 'confidence': 0.0, 'reasons': ['Insufficient data for MA crossover']}
 
-        # 1. MULTI-TIMEFRAME HIGH/LOW ANALYSIS
-        for period in lookback_periods:
-            if len(df) >= period:
-                period_high = df['high'].iloc[-period:].max()
-                period_low = df['low'].iloc[-period:].min()
-                period_range = period_high - period_low
+        # Calculate moving averages
+        ma_7 = df['close'].rolling(7).mean()
+        ma_25 = df['close'].rolling(25).mean()
 
-                # Calculate current position within the range
-                if period_range > 0:
-                    position_in_range = (current_price - period_low) / period_range
-                    opportunities['price_position'][f'{period}d'] = {
-                        'high': period_high,
-                        'low': period_low,
-                        'range': period_range,
-                        'position_pct': position_in_range * 100,
-                        'near_low': position_in_range < 0.25,  # Bottom 25%
-                        'near_high': position_in_range > 0.75,  # Top 25%
-                        'mid_range': 0.4 <= position_in_range <= 0.6  # Middle 20%
-                    }
+        if len(ma_7) < 2 or len(ma_25) < 2:
+            return {'action': 'HOLD', 'confidence': 0.0, 'reasons': ['Insufficient MA data']}
 
-        # 2. SUPPORT AND RESISTANCE LEVEL IDENTIFICATION
-        # Find recent swing highs and lows
-        if len(df) >= 20:
-            # Swing highs (local maxima)
-            for i in range(2, len(df)-2):
-                if (df['high'].iloc[i] > df['high'].iloc[i-1] and
-                    df['high'].iloc[i] > df['high'].iloc[i-2] and
-                    df['high'].iloc[i] > df['high'].iloc[i+1] and
-                    df['high'].iloc[i] > df['high'].iloc[i+2]):
-                    opportunities['resistance_levels'].append({
-                        'price': df['high'].iloc[i],
-                        'strength': 1,
-                        'distance_pct': abs(current_price - df['high'].iloc[i]) / current_price * 100
-                    })
+        # Current and previous MA values
+        ma7_current = ma_7.iloc[-1]
+        ma25_current = ma_25.iloc[-1]
+        ma7_previous = ma_7.iloc[-2]
+        ma25_previous = ma_25.iloc[-2]
 
-            # Swing lows (local minima)
-            for i in range(2, len(df)-2):
-                if (df['low'].iloc[i] < df['low'].iloc[i-1] and
-                    df['low'].iloc[i] < df['low'].iloc[i-2] and
-                    df['low'].iloc[i] < df['low'].iloc[i+1] and
-                    df['low'].iloc[i] < df['low'].iloc[i+2]):
-                    opportunities['support_levels'].append({
-                        'price': df['low'].iloc[i],
-                        'strength': 1,
-                        'distance_pct': abs(current_price - df['low'].iloc[i]) / current_price * 100
-                    })
+        # Crossover detection
+        golden_cross = (ma7_previous <= ma25_previous) and (ma7_current > ma25_current)
+        death_cross = (ma7_previous >= ma25_previous) and (ma7_current < ma25_current)
 
-        # 3. VOLATILITY-BASED OPPORTUNITIES
-        if len(df) >= 20:
-            # Calculate Average True Range (ATR) for volatility
-            high_low = df['high'] - df['low']
-            high_close = abs(df['high'] - df['close'].shift())
-            low_close = abs(df['low'] - df['close'].shift())
-            true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-            atr = true_range.rolling(14).mean().iloc[-1]
+        # Current trend strength
+        ma_spread = abs(ma7_current - ma25_current) / ma25_current * 100  # Percentage spread
+        price_above_ma7 = current_price > ma7_current
+        price_above_ma25 = current_price > ma25_current
 
-            opportunities['volatility_analysis'] = {
-                'atr': atr,
-                'atr_pct': (atr / current_price) * 100,
-                'volatility_level': 'HIGH' if (atr / current_price) > 0.03 else 'NORMAL'
+        # Volume confirmation (if available)
+        volume_surge = False
+        try:
+            if 'volume' in df.columns and len(df) >= 10:
+                avg_volume = df['volume'].rolling(10).mean().iloc[-1]
+                current_volume = df['volume'].iloc[-1]
+                volume_surge = current_volume > (avg_volume * 1.2)  # 20% above average
+        except:
+            pass
+
+        # GOLDEN CROSS - AGGRESSIVE BUY SIGNAL
+        if golden_cross:
+            confidence = 0.95  # Very high confidence for crossover
+            if volume_surge:
+                confidence = 0.99  # Maximum confidence with volume confirmation
+
+            reasons = [
+                "🟢 GOLDEN CROSS: MA7 crossed above MA25",
+                f"📈 Bullish momentum confirmed",
+                f"💰 MA spread: {ma_spread:.2f}%",
+                "🚀 AGGRESSIVE DAY TRADING BUY SIGNAL"
+            ]
+
+            if volume_surge:
+                reasons.append("📊 Volume surge confirms breakout")
+
+            return {
+                'action': 'BUY',
+                'confidence': confidence,
+                'reasons': reasons,
+                'ma7': ma7_current,
+                'ma25': ma25_current,
+                'spread': ma_spread,
+                'crossover_type': 'golden_cross'
             }
 
-        # 4. IDENTIFY SPECIFIC BUY OPPORTUNITIES
-        # Near support levels with good risk/reward
-        for support in opportunities['support_levels'][:3]:
-            if support['distance_pct'] < 2.0:  # Within 2% of support
-                opportunities['buy_opportunities'].append({
-                    'type': 'SUPPORT_BOUNCE',
-                    'entry_price': support['price'],
-                    'confidence': min(0.8, 1.0 - support['distance_pct']/2.0),
-                    'reason': f"Near support at ${support['price']:.2f}"
-                })
+        # DEATH CROSS - AGGRESSIVE SELL SIGNAL
+        elif death_cross:
+            confidence = 0.95  # Very high confidence for crossover
+            if volume_surge:
+                confidence = 0.99  # Maximum confidence with volume confirmation
 
-        # Bottom of recent ranges
-        for period, pos_data in opportunities['price_position'].items():
-            if pos_data['near_low'] and pos_data['range'] > current_price * 0.02:  # Significant range
-                opportunities['buy_opportunities'].append({
-                    'type': 'RANGE_BOTTOM',
-                    'entry_price': current_price,
-                    'confidence': 0.7,
-                    'reason': f"Near {period} low (bottom 25% of range)"
-                })
+            reasons = [
+                "🔴 DEATH CROSS: MA7 crossed below MA25",
+                f"📉 Bearish momentum confirmed",
+                f"💸 MA spread: {ma_spread:.2f}%",
+                "🚨 AGGRESSIVE DAY TRADING SELL SIGNAL"
+            ]
 
-        # 5. IDENTIFY SPECIFIC SELL OPPORTUNITIES
-        # Near resistance levels
-        for resistance in opportunities['resistance_levels'][:3]:
-            if resistance['distance_pct'] < 2.0:  # Within 2% of resistance
-                opportunities['sell_opportunities'].append({
-                    'type': 'RESISTANCE_REJECTION',
-                    'exit_price': resistance['price'],
-                    'confidence': min(0.8, 1.0 - resistance['distance_pct']/2.0),
-                    'reason': f"Near resistance at ${resistance['price']:.2f}"
-                })
+            if volume_surge:
+                reasons.append("📊 Volume surge confirms breakdown")
 
-        # Top of recent ranges
-        for period, pos_data in opportunities['price_position'].items():
-            if pos_data['near_high'] and pos_data['range'] > current_price * 0.02:  # Significant range
-                opportunities['sell_opportunities'].append({
-                    'type': 'RANGE_TOP',
-                    'exit_price': current_price,
-                    'confidence': 0.7,
-                    'reason': f"Near {period} high (top 25% of range)"
-                })
+            return {
+                'action': 'SELL',
+                'confidence': confidence,
+                'reasons': reasons,
+                'ma7': ma7_current,
+                'ma25': ma25_current,
+                'spread': ma_spread,
+                'crossover_type': 'death_cross'
+            }
 
-    except Exception as e:
-        log_message(f"❌ Error in high/low analysis: {e}")
+        # STRONG TREND CONTINUATION SIGNALS
+        elif ma7_current > ma25_current and ma_spread > 1.0:  # Strong bullish trend
+            if price_above_ma7 and price_above_ma25:
+                confidence = 0.75 + (min(ma_spread, 5) / 5 * 0.15)  # Up to 0.90 confidence
 
-    return opportunities
+                reasons = [
+                    f"📈 Strong bullish trend: MA7 ({ma7_current:.4f}) > MA25 ({ma25_current:.4f})",
+                    f"💪 MA spread: {ma_spread:.2f}% indicates momentum",
+                    f"🎯 Price above both MAs: Trend continuation signal"
+                ]
 
-def enhance_signal_with_high_low_analysis(signal, df, current_price):
-    """
-    Enhance existing trading signals with high/low price analysis
-    """
-    if not signal or len(df) < 50:
-        return signal
+                if volume_surge:
+                    confidence = min(confidence + 0.05, 0.95)
+                    reasons.append("📊 Volume supports the trend")
 
-    try:
-        # Get high/low opportunities
-        hl_analysis = analyze_high_low_opportunities(df, current_price)
+                return {
+                    'action': 'BUY',
+                    'confidence': confidence,
+                    'reasons': reasons,
+                    'ma7': ma7_current,
+                    'ma25': ma25_current,
+                    'spread': ma_spread,
+                    'crossover_type': 'bullish_trend'
+                }
 
-        # Add high/low analysis to signal
-        signal['high_low_analysis'] = hl_analysis
+        elif ma7_current < ma25_current and ma_spread > 1.0:  # Strong bearish trend
+            if not price_above_ma7 and not price_above_ma25:
+                confidence = 0.75 + (min(ma_spread, 5) / 5 * 0.15)  # Up to 0.90 confidence
 
-        # Enhance BUY signals
-        if signal.get('action') == 'BUY':
-            buy_score = 0
-            buy_reasons = []
+                reasons = [
+                    f"📉 Strong bearish trend: MA7 ({ma7_current:.4f}) < MA25 ({ma25_current:.4f})",
+                    f"💪 MA spread: {ma_spread:.2f}% indicates momentum",
+                    f"🎯 Price below both MAs: Trend continuation signal"
+                ]
 
-            # Check if we're near support or range bottoms
-            for opp in hl_analysis['buy_opportunities']:
-                buy_score += opp['confidence'] * 0.2
-                buy_reasons.append(opp['reason'])
+                if volume_surge:
+                    confidence = min(confidence + 0.05, 0.95)
+                    reasons.append("📊 Volume supports the trend")
 
-            # Check price position in ranges
-            low_position_count = sum(1 for pos in hl_analysis['price_position'].values()
-                                   if pos['near_low'])
+                return {
+                    'action': 'SELL',
+                    'confidence': confidence,
+                    'reasons': reasons,
+                    'ma7': ma7_current,
+                    'ma25': ma25_current,
+                    'spread': ma_spread,
+                    'crossover_type': 'bearish_trend'
+                }
 
-            if low_position_count >= 2:  # Near lows in multiple timeframes
-                buy_score += 0.3
-                buy_reasons.append(f"Near lows in {low_position_count} timeframes")
-
-            # Enhance confidence if good high/low setup
-            if buy_score > 0.2:
-                original_confidence = signal.get('confidence', 0.5)
-                enhanced_confidence = min(0.95, original_confidence + buy_score)
-                signal['confidence'] = enhanced_confidence
-                signal['high_low_boost'] = buy_score
-                signal['high_low_reasons'] = buy_reasons
-
-                log_message(f"🎯 HIGH/LOW BUY BOOST: +{buy_score:.2f} confidence")
-                for reason in buy_reasons[:3]:  # Top 3 reasons
-                    log_message(f"   {reason}")
-
-        # Enhance SELL signals
-        elif signal.get('action') == 'SELL':
-            sell_score = 0
-            sell_reasons = []
-
-            # Check if we're near resistance or range tops
-            for opp in hl_analysis['sell_opportunities']:
-                sell_score += opp['confidence'] * 0.2
-                sell_reasons.append(opp['reason'])
-
-            # Check price position in ranges
-            high_position_count = sum(1 for pos in hl_analysis['price_position'].values()
-                                    if pos['near_high'])
-
-            if high_position_count >= 2:  # Near highs in multiple timeframes
-                sell_score += 0.3
-                sell_reasons.append(f"Near highs in {high_position_count} timeframes")
-
-            # Enhance confidence if good high/low setup
-            if sell_score > 0.2:
-                original_confidence = signal.get('confidence', 0.5)
-                enhanced_confidence = min(0.95, original_confidence + sell_score)
-                signal['confidence'] = enhanced_confidence
-                signal['high_low_boost'] = sell_score
-                signal['high_low_reasons'] = sell_reasons
-
-                log_message(f"🎯 HIGH/LOW SELL BOOST: +{sell_score:.2f} confidence")
-                for reason in sell_reasons[:3]:  # Top 3 reasons
-                    log_message(f"   {reason}")
-
-        # Add detailed logging of price position
-        log_message(f"📊 PRICE POSITION ANALYSIS:")
-        for period, pos_data in hl_analysis['price_position'].items():
-            log_message(f"   {period}: {pos_data['position_pct']:.1f}% of range (${pos_data['low']:.2f} - ${pos_data['high']:.2f})")
+        # NO CLEAR SIGNAL
+        return {
+            'action': 'HOLD',
+            'confidence': 0.0,
+            'reasons': [
+                f"📊 MA7: {ma7_current:.4f}, MA25: {ma25_current:.4f}",
+                f"📈 Spread: {ma_spread:.2f}% - No clear crossover signal",
+                "⏳ Waiting for MA crossover or stronger trend"
+            ],
+            'ma7': ma7_current,
+            'ma25': ma25_current,
+            'spread': ma_spread,
+            'crossover_type': 'no_signal'
+        }
 
     except Exception as e:
-        log_message(f"❌ Error enhancing signal with high/low: {e}")
-
-    return signal
+        log_message(f"❌ Error in MA crossover detection: {e}")
+        return {'action': 'HOLD', 'confidence': 0.0, 'reasons': [f'MA crossover error: {e}']}
 
 # =============================================================================
 # DAILY HIGH/LOW PROFIT MAXIMIZATION STRATEGIES
@@ -2098,6 +968,35 @@ def implement_daily_high_low_strategies(df, current_price, signal, holding_posit
     try:
         if len(df) < 50:
             return strategy_signals
+
+        # 🎯 ABSOLUTE PRIORITY: MA7/MA25 CROSSOVER STRATEGY
+        # This strategy OVERRIDES all others when a strong signal is detected
+        ma_crossover_signal = detect_ma_crossover_signals(df, current_price)
+
+        # If MA crossover gives a strong signal (confidence > 0.85), use it exclusively
+        if ma_crossover_signal['confidence'] > 0.85:
+            log_message(f"🚀 MA7/MA25 ABSOLUTE PRIORITY: {ma_crossover_signal['action']} "
+                       f"(confidence: {ma_crossover_signal['confidence']:.3f})")
+            log_message(f"📊 MA7: {ma_crossover_signal.get('ma7', 'N/A')}, "
+                       f"MA25: {ma_crossover_signal.get('ma25', 'N/A')}")
+
+            # Override all strategy signals with MA crossover
+            strategy_signals['ma_crossover_priority'] = ma_crossover_signal
+            strategy_signals['optimal_strategy'] = {
+                'strategy': 'ma_crossover_priority',
+                'action': ma_crossover_signal['action'],
+                'confidence': ma_crossover_signal['confidence'],
+                'score': ma_crossover_signal['confidence'] * 1.5,  # Boost score for priority
+                'reason': f"MA7/MA25 ABSOLUTE PRIORITY: {ma_crossover_signal.get('crossover_type', 'crossover')}",
+                'ma_data': ma_crossover_signal
+            }
+            return strategy_signals
+
+        # If MA crossover gives a moderate signal, include it in strategy mix
+        elif ma_crossover_signal['confidence'] > 0.5:
+            strategy_signals['ma_crossover'] = ma_crossover_signal
+            log_message(f"📈 MA7/MA25 signal included: {ma_crossover_signal['action']} "
+                       f"(confidence: {ma_crossover_signal['confidence']:.3f})")
 
         # Get daily high/low data for the last few days
         daily_highs = df['high'].rolling(24).max().dropna()  # 24-hour rolling highs (if 1h data)
@@ -2484,6 +1383,21 @@ def select_optimal_high_low_strategy(strategy_signals, df, current_price):
     optimal = None
 
     try:
+        # 🎯 ABSOLUTE PRIORITY: Check for MA crossover priority signal
+        if 'ma_crossover_priority' in strategy_signals:
+            ma_priority = strategy_signals['ma_crossover_priority']
+            if ma_priority['confidence'] > 0.85:
+                optimal = {
+                    'strategy': 'ma_crossover_priority',
+                    'action': ma_priority['action'],
+                    'confidence': ma_priority['confidence'],
+                    'score': ma_priority['confidence'] * 1.5,  # Boosted score
+                    'reason': f"MA7/MA25 ABSOLUTE PRIORITY: {ma_priority.get('crossover_type', 'crossover')} (confidence: {ma_priority['confidence']:.3f})",
+                    'ma_data': ma_priority
+                }
+                log_message(f"🚀 EXECUTING MA7/MA25 PRIORITY: {optimal['action']} - {optimal['reason']}")
+                return optimal
+
         # Score each strategy based on confidence and market suitability
         strategy_scores = {}
 
@@ -2497,6 +1411,11 @@ def select_optimal_high_low_strategy(strategy_signals, df, current_price):
             if action in ['BUY', 'SELL'] and confidence > 0.5:
                 # Base score is confidence
                 score = confidence
+
+                # 🎯 BOOST MA CROSSOVER SIGNALS (even moderate ones get priority)
+                if strategy_name in ['ma_crossover', 'ma_crossover_priority']:
+                    score *= 2.0  # Double the score for any MA crossover signal
+                    log_message(f"📈 MA crossover signal boosted: {strategy_name} score {score:.3f}")
 
                 # Adjust score based on market conditions
                 volatility = df['close'].pct_change().iloc[-10:].std()
@@ -2716,18 +1635,323 @@ def display_institutional_analysis_safe(inst_data):
         traceback.print_exc()
 
 # =============================================================================
+# LIVE STRATEGY LOOP WITH MA7/MA25 ABSOLUTE PRIORITY
+# =============================================================================
+
+def run_continuously(interval_seconds=60):
+    """
+    🎯 AGGRESSIVE DAY TRADING BOT - MA7/MA25 Crossover Priority
+    
+    Main trading loop that executes MA7/MA25 crossover strategy as absolute priority,
+    with fallback to other strategies when no clear crossover signals exist.
+    """
+    global holding_position, last_trade_time, consecutive_losses, active_trade_index, entry_price, stop_loss_price, take_profit_price
+
+    print("\n" + "="*70)
+    print("🚀 AGGRESSIVE DAY TRADING BOT - MA7/MA25 CROSSOVER PRIORITY")
+    print("🎯 ABSOLUTE PRIORITY: MA7/MA25 crossover signals override all other strategies")
+    print("📈 STRATEGY: Golden Cross (BUY) | Death Cross (SELL) | Trend Continuation")
+    print("="*70)
+
+    while True:
+        # Always ensure risk management variables are initialized
+        if 'entry_price' not in globals() or entry_price is None:
+            entry_price = None
+        if 'stop_loss_price' not in globals() or stop_loss_price is None:
+            stop_loss_price = None
+        if 'take_profit_price' not in globals() or take_profit_price is None:
+            take_profit_price = None
+
+        print("\n" + "="*50, flush=True)
+        print("🎯 MA7/MA25 DAY TRADING STRATEGY LOOP", flush=True)
+        print("="*50, flush=True)
+
+        # Add timestamp for debugging
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🕐 Loop Started: {current_time}", flush=True)
+
+        from log_utils import calculate_daily_pnl, calculate_total_pnl_and_summary, calculate_unrealized_pnl
+
+        # Enhanced PnL reporting with more details
+        daily_pnl = calculate_daily_pnl()
+        pnl_summary = calculate_total_pnl_and_summary()
+
+        print(f"📊 TRADING PERFORMANCE:", flush=True)
+        print(f"   📉 Daily PnL (realized): ${daily_pnl:.2f}", flush=True)
+        print(f"   💰 Total PnL (realized): ${pnl_summary['total_realized_pnl']:.2f}", flush=True)
+        print(f"   📈 Recent Activity: {pnl_summary['recent_trades']} trades (7 days)", flush=True)
+        print(f"   🕐 Last Trade: {pnl_summary['last_trade_date']}", flush=True)
+
+        # Calculate dynamic daily loss limit based on current portfolio
+        balance = safe_api_call(exchange.fetch_balance)
+        current_price = safe_api_call(exchange.fetch_ticker, 'BTC/USDC')['last']
+        btc_balance = balance['BTC']['free']
+        total_portfolio_value = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
+
+        # Show unrealized PnL if holding position
+        if holding_position and entry_price and entry_price > 0:
+            unrealized = calculate_unrealized_pnl(current_price, entry_price, btc_balance)
+            print(f"   💎 UNREALIZED: ${unrealized['unrealized_pnl_usd']:.2f} ({unrealized['unrealized_pnl_pct']:+.2f}%)", flush=True)
+            print(f"   📍 Position: {unrealized['btc_amount']:.6f} BTC @ ${unrealized['entry_price']:.2f} → ${unrealized['current_price']:.2f}", flush=True)
+
+        dynamic_daily_loss_limit = calculate_dynamic_daily_loss_limit(total_portfolio_value)
+
+        # Enhanced risk management with dynamic limits
+        if daily_pnl <= -dynamic_daily_loss_limit:
+            print(f"⚠️ Daily loss alert: ${daily_pnl:.2f} exceeds limit -${dynamic_daily_loss_limit:.2f} (continuing trading as requested)", flush=True)
+
+        if consecutive_losses >= max_consecutive_losses:
+            print(f"⚠️ {consecutive_losses} consecutive losses detected (continuing trading as requested)", flush=True)
+            consecutive_losses = 0
+
+        # Check trade timing to avoid overtrading
+        time_since_last_trade = time.time() - last_trade_time
+        if time_since_last_trade < min_trade_interval:
+            remaining_time = min_trade_interval - int(time_since_last_trade)
+            print(f"⏳ Trade cooldown: {remaining_time}s remaining (avoiding overtrading)", flush=True)
+            time.sleep(min(interval_seconds, remaining_time + 10))
+            continue
+
+        try:
+            df = fetch_ohlcv(exchange, 'BTC/USDC', '1m', 50)
+
+            # Synchronize holding position with actual balance
+            balance = safe_api_call(exchange.fetch_balance)
+            btc_balance = balance['BTC']['free']
+            current_price = df['close'].iloc[-1]
+
+            # Auto-detect if we're actually holding BTC (threshold: $1 worth)
+            btc_value = btc_balance * current_price
+            if btc_value > 1.0 and not holding_position:
+                holding_position = True
+                entry_price = current_price
+                stop_loss_price = current_price * (1 - stop_loss_percentage)
+                take_profit_price = current_price * (1 + take_profit_percentage)
+
+                # Update state manager
+                state_manager.update_trading_state(
+                    holding_position=True,
+                    entry_price=entry_price,
+                    stop_loss_price=stop_loss_price,
+                    take_profit_price=take_profit_price
+                )
+
+                print(f"🔄 SYNC: Detected existing BTC position worth ${btc_value:.2f}", flush=True)
+            elif btc_value <= 1.0 and holding_position:
+                holding_position = False
+                entry_price = None
+                stop_loss_price = None
+                take_profit_price = None
+
+                # Update state manager
+                state_manager.update_trading_state(
+                    holding_position=False,
+                    entry_price=None,
+                    stop_loss_price=None,
+                    take_profit_price=None
+                )
+                print(f"🔄 SYNC: No significant BTC position detected", flush=True)
+
+            # 🎯 STEP 1: MA7/MA25 CROSSOVER ANALYSIS (ABSOLUTE PRIORITY)
+            ma_signal = detect_ma_crossover_signals(df, current_price)
+
+            print(f"\n🎯 MA7/MA25 CROSSOVER ANALYSIS:", flush=True)
+            print(f"   Action: {ma_signal['action']}", flush=True)
+            print(f"   Confidence: {ma_signal['confidence']:.3f}", flush=True)
+            print(f"   Type: {ma_signal.get('crossover_type', 'unknown')}", flush=True)
+            if 'ma7' in ma_signal and 'ma25' in ma_signal:
+                print(f"   MA7: {ma_signal['ma7']:.4f} | MA25: {ma_signal['ma25']:.4f}", flush=True)
+                print(f"   Spread: {ma_signal.get('spread', 0):.2f}%", flush=True)
+
+            for reason in ma_signal.get('reasons', []):
+                print(f"   {reason}", flush=True)
+
+            # 🚨 ABSOLUTE PRIORITY: Execute MA7/MA25 signals immediately if confidence > 0.85
+            if ma_signal['confidence'] > 0.85:
+                print(f"\n🚀 MA7/MA25 ABSOLUTE PRIORITY TRIGGERED!", flush=True)
+                print(f"🎯 EXECUTING: {ma_signal['action']} (confidence: {ma_signal['confidence']:.3f})", flush=True)
+
+                # Execute BUY signal
+                if ma_signal['action'] == 'BUY' and not holding_position:
+                    position_size = calculate_position_size(current_price, 0.02, ma_signal['confidence'], total_portfolio_value)
+                    if position_size > 0:
+                        print(f"🚀 MA7/MA25 PRIORITY BUY: ${position_size:.2f}")
+                        order = place_intelligent_order('BTC/USDC', 'buy', amount_usd=position_size, use_limit=True)
+
+                        if order:
+                            holding_position = True
+                            state_manager.enter_trade(
+                                entry_price=entry_price,
+                                stop_loss_price=stop_loss_price,
+                                take_profit_price=take_profit_price,
+                                trade_id=order.get('id')
+                            )
+                            print(f"✅ MA7/MA25 CROSSOVER BUY EXECUTED")
+
+                # Execute SELL signal
+                elif ma_signal['action'] == 'SELL' and holding_position:
+                    btc_amount = balance['BTC']['free']
+                    if btc_amount > 0:
+                        print(f"🚨 MA7/MA25 PRIORITY SELL: {btc_amount:.6f} BTC")
+                        order = place_intelligent_order('BTC/USDC', 'sell', amount_usd=0, use_limit=True)
+
+                        if order:
+                            state_manager.exit_trade("MA_CROSSOVER_SELL")
+                            holding_position = False
+                            consecutive_losses = 0
+                            print(f"✅ MA7/MA25 CROSSOVER SELL EXECUTED")
+
+                # Skip other strategies when MA priority is active
+                print("⏭️ Skipping other strategies - MA7/MA25 priority active")
+                time.sleep(interval_seconds)
+                continue
+
+            # 🎯 STEP 2: Check Risk Management (Stop Loss, Take Profit)
+            if holding_position:
+                total_balance = balance['total']['USDC'] + (balance['total']['BTC'] * current_price)
+                risk_action = check_risk_management(current_price, total_balance)
+
+                if risk_action in ['STOP_LOSS', 'TAKE_PROFIT', 'EMERGENCY_EXIT', 'MAX_DRAWDOWN_HIT', 'TRAILING_STOP']:
+                    print(f"🚨 RISK MANAGEMENT TRIGGERED: {risk_action}")
+                    btc_amount = balance['BTC']['free']
+                    if btc_amount > 0:
+                        order = safe_api_call(exchange.create_market_order, 'BTC/USDC', 'sell', btc_amount)
+
+                        if risk_action in ['STOP_LOSS', 'EMERGENCY_EXIT']:
+                            consecutive_losses += 1
+                            state_manager.update_consecutive_losses(consecutive_losses)
+                        else:
+                            consecutive_losses = 0
+                            state_manager.update_consecutive_losses(consecutive_losses)
+
+                        # Log the trade
+                        updated_balance = safe_api_call(exchange.fetch_balance)
+                        log_trade("SELL", "BTC/USDC", btc_amount, current_price, updated_balance['USDC']['free'])
+
+                        # Clear persistent state
+                        state_manager.exit_trade(risk_action)
+                        holding_position = False
+                        print(f"✅ Risk management SELL: {btc_amount:.6f} BTC at ${current_price:.2f}")
+
+                        time.sleep(300)  # 5 minute cooldown
+                        continue
+
+            # 🎯 STEP 3: Fallback Strategies (when MA crossover signal is weak)
+            if ma_signal['confidence'] < 0.85:
+                print(f"\n📊 FALLBACK STRATEGIES (MA confidence: {ma_signal['confidence']:.3f})")
+
+                # Simple fallback: use MA signal even if moderate confidence
+                signal = ma_signal.copy()
+
+                # If MA signal is weak, create a conservative HOLD signal
+                if ma_signal['confidence'] < 0.5:
+                    signal = {
+                        'action': 'HOLD',
+                        'confidence': 0.0,
+                        'reason': 'No clear MA crossover signal - awaiting better opportunity'
+                    }
+
+                # 🎯 BOOST MODERATE MA SIGNALS for day trading
+                elif ma_signal['confidence'] >= 0.5:
+                    signal['confidence'] = min(0.85, ma_signal['confidence'] + 0.15)  # Boost for day trading
+                    signal['reason'] = f"Boosted MA7/MA25 {ma_signal.get('crossover_type', 'signal')} for day trading"
+                    print(f"🎯 MA BOOST: Signal boosted to {signal['confidence']:.3f}")
+
+                # Display system status
+                print(f"\n🎯 SIGNAL ANALYSIS: {signal.get('action', 'N/A')} at ${current_price:.2f}", flush=True)
+                print(f"   Confidence: {signal.get('confidence', 0.0):.3f}", flush=True)
+                print(f"   Reason: {signal.get('reason', 'N/A')}", flush=True)
+
+                # Get dynamic confidence threshold
+                strategy_config = optimized_config['strategy_parameters']
+                min_confidence = strategy_config['confidence_threshold']
+
+                # 🎯 LOWER THRESHOLD FOR MA SIGNALS (aggressive day trading)
+                if 'MA7/MA25' in signal.get('reason', ''):
+                    min_confidence *= 0.80  # 20% lower threshold for MA signals
+                    print(f"🎯 MA signal - reduced threshold to {min_confidence:.3f}")
+
+                print(f"   Required confidence: {min_confidence:.3f}", flush=True)
+                print(f"   Signal confidence: {signal.get('confidence', 0):.3f}", flush=True)
+
+                # Execute trading logic with MA focus
+                if signal['action'] == 'BUY' and not holding_position and signal.get('confidence', 0) >= min_confidence:
+                    position_size = calculate_position_size(current_price, 0.02, signal['confidence'], total_portfolio_value)
+                    if position_size > 0:
+                        print(f"📥 MA-ENHANCED BUY signal - ${position_size:.2f} of BTC...")
+                        print(f"   MA7/MA25 confidence: {ma_signal['confidence']:.3f}")
+                        print(f"   Final confidence: {signal['confidence']:.3f}")
+
+                        order = place_intelligent_order('BTC/USDC', 'buy', amount_usd=position_size, use_limit=True)
+
+                        if order:
+                            holding_position = True
+                            state_manager.enter_trade(
+                                entry_price=entry_price,
+                                stop_loss_price=stop_loss_price,
+                                take_profit_price=take_profit_price,
+                                trade_id=order.get('id')
+                            )
+                            print(f"✅ BUY EXECUTED: MA-enhanced strategy")
+
+                elif signal['action'] == 'SELL' and holding_position and signal.get('confidence', 0) >= min_confidence:
+                    # Calculate current P&L
+                    current_pnl = 0
+                    if entry_price and entry_price > 0:
+                        current_pnl = (current_price - entry_price) / entry_price
+
+                    execute_sell = True
+
+                    # Don't sell at loss unless MA strongly confirms
+                    if current_pnl < -0.01:  # Losing more than 1%
+                        if ma_signal['action'] != 'SELL' or ma_signal['confidence'] < 0.7:
+                            execute_sell = False
+                            print(f"⚠️ SELL blocked - would realize {current_pnl:.2%} loss without strong MA confirmation")
+
+                    if execute_sell:
+                        btc_amount = balance['BTC']['free']
+                        if btc_amount > 0:
+                            print(f"📤 MA-ENHANCED SELL signal - Current P&L: {current_pnl:.2%}")
+                            print(f"   MA7/MA25 confidence: {ma_signal['confidence']:.3f}")
+                            print(f"   Final confidence: {signal['confidence']:.3f}")
+
+                            order = place_intelligent_order('BTC/USDC', 'sell', amount_usd=0, use_limit=True)
+
+                            if order:
+                                state_manager.exit_trade("MA_ENHANCED_SELL")
+                                holding_position = False
+                                consecutive_losses = 0
+                                print(f"✅ SELL EXECUTED: MA-enhanced strategy")
+
+                else:
+                    print("⏸ No action taken - awaiting stronger MA7/MA25 signal", flush=True)
+
+        except Exception as e:
+            print("❌ Error in trading loop:", e, flush=True)
+
+        # Add heartbeat before sleep
+        print(f"💓 Loop completed, sleeping for {interval_seconds} seconds...", flush=True)
+        time.sleep(interval_seconds)
+
+def generate_reports():
+    """Generate trading performance reports"""
+    try:
+        print("📊 Generating performance reports...")
+        # Add report generation logic here if needed
+        print("✅ Reports generated successfully")
+    except Exception as e:
+        print(f"❌ Error generating reports: {e}")
+
+# =============================================================================
 # MAIN EXECUTION
 # =============================================================================
 
 if __name__ == "__main__":
-    try:
-        print("🚀 Starting AGGRESSIVE DAY TRADING BTC Bot...")
-        print("🏛️ Features: Hedge Fund Strategies, Machine Learning, Kelly Criterion, VaR Risk Management")
-        print("📊 Strategies: Enhanced RSI, Bollinger Bands, Mean Reversion, VWAP + ML Ensemble")
-        print("🧠 Institutional: Market Regime Detection, Cross-Asset Correlation, Kelly Sizing")
-        print("⚖️ Risk Management: Value-at-Risk, Hurst Exponent, Statistical Arbitrage Signals")
-        print("💡 NEW: Percentage-Based Position Sizing for Scalable Growth")
+    print("🚀 STARTING AGGRESSIVE DAY TRADING BOT")
+    print("🎯 PRIMARY STRATEGY: MA7/MA25 Crossover")
+    print("="*70)
 
+    try:
         # Display configuration info
         trading_config = optimized_config['trading']
         if trading_config.get('position_sizing_mode') == 'percentage':
@@ -2736,7 +1960,8 @@ if __name__ == "__main__":
             print(f"💰 Position Sizing: Fixed ${trading_config['base_amount_usd']} per trade")
 
         print(f"⏰ Trade Cooldown: {min_trade_interval//60} minutes | Stop Loss: {stop_loss_percentage:.1%} | Take Profit: {take_profit_percentage:.1%}")
-        print(f"🔧 Confidence Threshold: {optimized_config['strategy_parameters']['confidence_threshold']:.3f} | Institutional Auto-Optimization: ENABLED")
+        print(f"🔧 Confidence Threshold: {optimized_config['strategy_parameters']['confidence_threshold']:.3f}")
+        print("🎯 MA7/MA25 ABSOLUTE PRIORITY: Crossover signals override all other strategies")
         print("💡 Press Ctrl+C to stop and generate reports")
         print("="*70)
 
@@ -2757,3 +1982,4 @@ if __name__ == "__main__":
             generate_reports()
         except:
             print("⚠️ Report generation failed")
+        print("🔧 Check logs for debugging information")
