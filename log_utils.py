@@ -3,7 +3,11 @@ from datetime import datetime
 import os
 import pandas as pd
 
-LOG_FILE = "trade_log.csv"
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+# Unified log files at workspace root
+LOG_FILE = os.path.join(BASE_DIR, 'trade_log.csv')
+BOT_LOG_FILE = os.path.join(BASE_DIR, 'bot_log.txt')
 
 def init_log():
     if not os.path.exists(LOG_FILE):
