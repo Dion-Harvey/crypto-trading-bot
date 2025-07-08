@@ -584,14 +584,18 @@ def is_strong_trend(df, signal):
 
     return False
 
-def place_intelligent_order(symbol, side, amount_usd, use_limit=True, timeout_seconds=20):
+def place_intelligent_order(symbol, side, amount_usd, use_limit=True, timeout_seconds=None):
     """
-    Intelligent order execution with limit orders and market order fallback
-    Reduces slippage while ensuring fills
+    Enhanced intelligent order execution with improved limit order handling
+    Uses config-based timeout and smarter market fallback
     """
     global last_trade_time, consecutive_losses, entry_price, stop_loss_price, take_profit_price
 
     try:
+        # Get timeout from config if not specified
+        if timeout_seconds is None:
+            timeout_seconds = optimized_config['trading']['limit_order_timeout_seconds']
+
         # Check if we have sufficient balance before placing order
         balance = safe_api_call(exchange.fetch_balance)
 
@@ -599,6 +603,16 @@ def place_intelligent_order(symbol, side, amount_usd, use_limit=True, timeout_se
         orderbook = safe_api_call(exchange.fetch_order_book, symbol)
         ticker = safe_api_call(exchange.fetch_ticker, symbol)
         market_price = ticker['last']
+
+        # Calculate spread to determine if limit order is worthwhile
+        bid_price = orderbook['bids'][0][0] if orderbook['bids'] else market_price * 0.999
+        ask_price = orderbook['asks'][0][0] if orderbook['asks'] else market_price * 1.001
+        spread_pct = (ask_price - bid_price) / market_price * 100
+
+        # If spread is too wide (>0.5%), use market order for faster execution
+        if spread_pct > 0.5:
+            use_limit = False
+            print(f"⚡ Wide spread detected ({spread_pct:.2f}%) - using market order for fast execution")
 
         # Binance minimum order requirements
         MIN_NOTIONAL_VALUE = 10.0  # Minimum $10 USD equivalent
@@ -610,8 +624,9 @@ def place_intelligent_order(symbol, side, amount_usd, use_limit=True, timeout_se
                 print(f"❌ Insufficient USDC balance: ${available_usd:.2f} < ${amount_usd:.2f}")
                 return None
 
-            # Use best bid for limit buy (slightly below market)
-            limit_price = orderbook['bids'][0][0] if orderbook['bids'] else market_price * 0.999
+            # Use slightly more conservative limit prices for better fill rates
+            # For BUY: place slightly above best bid but below market
+            limit_price = bid_price + (market_price - bid_price) * 0.3  # 30% into the spread
             amount = round(amount_usd / limit_price, 6)
 
             # Check minimum order size for BUY
@@ -643,8 +658,9 @@ def place_intelligent_order(symbol, side, amount_usd, use_limit=True, timeout_se
                 print(f"   BTC amount: {amount:.6f}, Price: ${market_price:.2f}")
                 return None
 
-            # Use best ask for limit sell (slightly above market)
-            limit_price = orderbook['asks'][0][0] if orderbook['asks'] else market_price * 1.001
+            # Use slightly more conservative limit prices for better fill rates
+            # For SELL: place slightly below best ask but above market
+            limit_price = ask_price - (ask_price - market_price) * 0.3  # 30% into the spread
 
             print(f"✅ SELL order validation passed: {amount:.6f} BTC worth ${notional_value:.2f}")
 
@@ -822,25 +838,57 @@ def detect_ma_crossover_signals(df, current_price):
         except:
             pass
 
-        # GOLDEN CROSS - AGGRESSIVE BUY SIGNAL
+        # GOLDEN CROSS - ENHANCED BUY SIGNAL WITH CONFIRMATIONS
         if golden_cross:
-            confidence = 0.95  # Very high confidence for crossover
+            # Start with base confidence for crossover
+            confidence = 0.75  # Lower base, require confirmations
+
+            # Additional confirmation factors
+            confirmations = []
+
+            # Volume confirmation (most important)
             if volume_surge:
-                confidence = 0.99  # Maximum confidence with volume confirmation
+                confidence += 0.10
+                confirmations.append("📊 Volume surge confirms breakout")
+
+            # Price position confirmation
+            if price_above_ma7 and price_above_ma25:
+                confidence += 0.05
+                confirmations.append("📈 Price above both MAs")
+
+            # Momentum confirmation - check MA7 slope
+            ma7_momentum = (ma7_current - ma_7.iloc[-3]) / ma_7.iloc[-3] if len(ma_7) >= 3 else 0
+            if ma7_momentum > 0.003:  # 0.3% momentum minimum
+                confidence += 0.05
+                confirmations.append("🚀 MA7 upward momentum")
+
+            # Spread confirmation (wider spread = stronger signal)
+            if ma_spread > 0.3:  # 0.3% spread minimum for day trading
+                confidence += 0.05
+                confirmations.append(f"📏 Strong spread: {ma_spread:.2f}%")
+            elif ma_spread < 0.1:  # Penalize very weak spreads
+                confidence -= 0.10
+                confirmations.append(f"⚠️ Weak spread: {ma_spread:.2f}%")
+
+            # Trend context - check if we're in overall uptrend
+            if len(ma_25) >= 5:
+                ma25_trend = (ma25_current - ma_25.iloc[-5]) / ma_25.iloc[-5]
+                if ma25_trend > 0.01:  # MA25 itself trending up
+                    confidence += 0.03
+                    confirmations.append("📈 MA25 trending upward")
 
             reasons = [
                 "🟢 GOLDEN CROSS: MA7 crossed above MA25",
-                f"📈 Bullish momentum confirmed",
-                f"💰 MA spread: {ma_spread:.2f}%",
-                "🚀 AGGRESSIVE DAY TRADING BUY SIGNAL"
+                f"📈 MA7: {ma7_current:.2f} > MA25: {ma25_current:.2f}",
+                f"💰 Spread: {ma_spread:.2f}%",
+                "🎯 DAY TRADING BUY SIGNAL"
             ]
 
-            if volume_surge:
-                reasons.append("📊 Volume surge confirms breakout")
+            reasons.extend(confirmations)
 
             return {
                 'action': 'BUY',
-                'confidence': confidence,
+                'confidence': min(0.95, confidence),  # Cap at 95%
                 'reasons': reasons,
                 'ma7': ma7_current,
                 'ma25': ma25_current,
@@ -848,25 +896,57 @@ def detect_ma_crossover_signals(df, current_price):
                 'crossover_type': 'golden_cross'
             }
 
-        # DEATH CROSS - AGGRESSIVE SELL SIGNAL
+        # DEATH CROSS - ENHANCED SELL SIGNAL WITH CONFIRMATIONS
         elif death_cross:
-            confidence = 0.95  # Very high confidence for crossover
+            # Start with base confidence for crossover
+            confidence = 0.75  # Lower base, require confirmations
+
+            # Additional confirmation factors
+            confirmations = []
+
+            # Volume confirmation (most important)
             if volume_surge:
-                confidence = 0.99  # Maximum confidence with volume confirmation
+                confidence += 0.10
+                confirmations.append("📊 Volume surge confirms breakdown")
+
+            # Price position confirmation
+            if not price_above_ma7 and not price_above_ma25:
+                confidence += 0.05
+                confirmations.append("📉 Price below both MAs")
+
+            # Momentum confirmation - check MA7 slope
+            ma7_momentum = (ma7_current - ma_7.iloc[-3]) / ma_7.iloc[-3] if len(ma_7) >= 3 else 0
+            if ma7_momentum < -0.003:  # 0.3% downward momentum minimum
+                confidence += 0.05
+                confirmations.append("📉 MA7 downward momentum")
+
+            # Spread confirmation
+            if ma_spread > 0.3:  # 0.3% spread minimum
+                confidence += 0.05
+                confirmations.append(f"📏 Strong spread: {ma_spread:.2f}%")
+            elif ma_spread < 0.1:  # Penalize very weak spreads
+                confidence -= 0.10
+                confirmations.append(f"⚠️ Weak spread: {ma_spread:.2f}%")
+
+            # Trend context - check if we're in overall downtrend
+            if len(ma_25) >= 5:
+                ma25_trend = (ma25_current - ma_25.iloc[-5]) / ma_25.iloc[-5]
+                if ma25_trend < -0.01:  # MA25 itself trending down
+                    confidence += 0.03
+                    confirmations.append("📉 MA25 trending downward")
 
             reasons = [
                 "🔴 DEATH CROSS: MA7 crossed below MA25",
-                f"📉 Bearish momentum confirmed",
-                f"💸 MA spread: {ma_spread:.2f}%",
-                "🚨 AGGRESSIVE DAY TRADING SELL SIGNAL"
+                f"📉 MA7: {ma7_current:.2f} < MA25: {ma25_current:.2f}",
+                f"💸 Spread: {ma_spread:.2f}%",
+                "🎯 DAY TRADING SELL SIGNAL"
             ]
 
-            if volume_surge:
-                reasons.append("📊 Volume surge confirms breakdown")
+            reasons.extend(confirmations)
 
             return {
                 'action': 'SELL',
-                'confidence': confidence,
+                'confidence': min(0.95, confidence),  # Cap at 95%
                 'reasons': reasons,
                 'ma7': ma7_current,
                 'ma25': ma25_current,
