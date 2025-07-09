@@ -1,0 +1,56 @@
+2025-07-09 10:24:58,311 - INFO - Output: None
+2025-07-09 10:24:59,080 - INFO - Output: None
+2025-07-09 10:24:59,086 - INFO - ============================================================
+2025-07-09 10:29:37,532 - INFO - [TEST] Running test sync...
+2025-07-09 10:29:37,532 - INFO - [DAILY] Daily sync job started at 2025-07-09 10:29:37.532543
+2025-07-09 10:29:37,532 - INFO - [SYNC] Starting daily trade log fetch...
+2025-07-09 10:29:41,412 - INFO - [SUCCESS] Trade log fetch completed successfully
+2025-07-09 10:29:41,425 - INFO - [SYNC] Starting log synchronization...
+2025-07-09 10:29:42,200 - INFO - [SUCCESS] Log synchronization completed successfully
+2025-07-09 10:29:42,204 - INFO - [SUCCESS] Daily sync completed successfully!
+2025-07-09 10:29:42,205 - INFO - [INFO] Trade logs are now up-to-date and synchronized
+2025-07-09 10:29:42,205 - INFO - ============================================================
+2025-07-09 10:37:02,547 - INFO - [TEST] Running test sync...
+2025-07-09 10:37:02,547 - INFO - [DAILY] Daily sync job started at 2025-07-09 10:37:02.547716
+2025-07-09 10:37:02,547 - INFO - [SYNC] Starting daily trade log fetch...
+2025-07-09 10:37:06,786 - INFO - [SUCCESS] Trade log fetch completed successfully
+2025-07-09 10:37:06,786 - INFO - [INFO] Trade fetch output logged to file
+2025-07-09 10:37:06,786 - INFO - [SYNC] Starting log synchronization...
+2025-07-09 10:37:07,647 - INFO - [SUCCESS] Log synchronization completed successfully
+2025-07-09 10:37:07,648 - INFO - [INFO] Sync output logged to file
+2025-07-09 10:37:07,648 - INFO - [SUCCESS] Daily sync completed successfully!
+2025-07-09 10:37:07,648 - INFO - [INFO] Trade logs are now up-to-date and synchronized
+2025-07-09 10:37:07,648 - INFO - ============================================================
+2025-07-09 10:38:58,172 - INFO - [TEST] Running test sync...
+2025-07-09 10:38:58,172 - INFO - [DAILY] Daily sync job started at 2025-07-09 10:38:58.172777
+2025-07-09 10:38:58,173 - INFO - [SYNC] Starting daily trade log fetch...
+2025-07-09 10:39:02,173 - INFO - [SUCCESS] Trade log fetch completed successfully
+2025-07-09 10:39:02,173 - INFO - [INFO] Trade fetch output logged to file
+2025-07-09 10:39:02,174 - INFO - [SYNC] Starting log synchronization...
+2025-07-09 10:39:02,961 - INFO - [SUCCESS] Log synchronization completed successfully
+2025-07-09 10:39:02,961 - INFO - [INFO] Sync output logged to file
+2025-07-09 10:39:02,961 - INFO - [SUCCESS] Daily sync completed successfully!
+2025-07-09 10:39:02,961 - INFO - [INFO] Trade logs are now up-to-date and synchronized
+2025-07-09 10:39:02,962 - INFO - ============================================================
+2025-07-09 10:39:11,728 - INFO - [TEST] Running test sync...
+2025-07-09 10:39:11,728 - INFO - [DAILY] Daily sync job started at 2025-07-09 10:39:11.728625
+2025-07-09 10:39:11,728 - INFO - [SYNC] Starting daily trade log fetch...
+2025-07-09 10:39:15,984 - INFO - [SUCCESS] Trade log fetch completed successfully
+2025-07-09 10:39:15,984 - INFO - [INFO] Trade fetch output logged to file
+2025-07-09 10:39:15,984 - INFO - [SYNC] Starting log synchronization...
+2025-07-09 10:39:16,779 - INFO - [SUCCESS] Log synchronization completed successfully
+2025-07-09 10:39:16,779 - INFO - [INFO] Sync output logged to file
+2025-07-09 10:39:16,779 - INFO - [SUCCESS] Daily sync completed successfully!
+2025-07-09 10:39:16,780 - INFO - [INFO] Trade logs are now up-to-date and synchronized
+2025-07-09 10:39:16,780 - INFO - ============================================================
+2025-07-09 10:39:48,095 - INFO - [TEST] Running test sync...
+2025-07-09 10:39:48,096 - INFO - [DAILY] Daily sync job started at 2025-07-09 10:39:48.096160
+2025-07-09 10:39:48,096 - INFO - [SYNC] Starting daily trade log fetch...
+2025-07-09 10:39:52,352 - INFO - [SUCCESS] Trade log fetch completed successfully
+2025-07-09 10:39:52,352 - INFO - [INFO] Trade fetch output logged to file
+2025-07-09 10:39:52,352 - INFO - [SYNC] Starting log synchronization...
+2025-07-09 10:39:53,198 - INFO - [SUCCESS] Log synchronization completed successfully
+2025-07-09 10:39:53,199 - INFO - [INFO] Sync output logged to file
+2025-07-09 10:39:53,199 - INFO - [SUCCESS] Daily sync completed successfully!
+2025-07-09 10:39:53,199 - INFO - [INFO] Trade logs are now up-to-date and synchronized
+2025-07-09 10:39:53,199 - INFO - ============================================================
