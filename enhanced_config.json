@@ -6,7 +6,7 @@
     "max_amount_usd": 40,
     "use_intelligent_orders": true,
     "limit_order_timeout_seconds": 120,
-    "trade_cooldown_seconds": 1800,
+    "trade_cooldown_seconds": 900,
     "position_sizing_mode": "fixed",
     "base_position_pct": 0.35,
     "min_position_pct": 0.25,
@@ -150,11 +150,17 @@
     "performance_tracking": true
   },
   "system": {
-    "loop_interval_seconds": 60,
+    "loop_interval_seconds": 30,
     "connection_retry_attempts": 3,
     "connection_retry_delay": 5,
     "state_save_frequency": "after_each_trade",
-    "backup_config_on_change": true
+    "backup_config_on_change": true,
+    "price_jump_detection": {
+      "enabled": true,
+      "threshold_pct": 0.5,
+      "detection_window_seconds": 60,
+      "override_cooldown": true
+    }
   },
   "_comment": "\u00f0\u0178\u017d\u00af DAY TRADER OPTIMIZED CONFIGURATION - More aggressive thresholds for active trading"
 }

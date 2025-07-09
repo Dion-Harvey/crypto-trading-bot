@@ -33,6 +33,8 @@ from performance_tracker import performance_tracker
 from enhanced_config import get_bot_config
 from state_manager import get_state_manager
 from success_rate_enhancer import success_enhancer, check_anti_whipsaw_protection
+from price_jump_detector import detect_price_jump, get_price_jump_detector
+from multi_timeframe_ma import detect_multi_timeframe_ma_signals
 
 # Initialize systems
 init_log()
@@ -1728,9 +1730,10 @@ def run_continuously(interval_seconds=60):
     global holding_position, last_trade_time, consecutive_losses, active_trade_index, entry_price, stop_loss_price, take_profit_price
 
     print("\n" + "="*70)
-    print("🚀 AGGRESSIVE DAY TRADING BOT - MA7/MA25 CROSSOVER PRIORITY")
-    print("🎯 ABSOLUTE PRIORITY: MA7/MA25 crossover signals override all other strategies")
-    print("📈 STRATEGY: Golden Cross (BUY) | Death Cross (SELL) | Trend Continuation")
+    print("🚀 ENHANCED DAY TRADING BOT - Multi-Timeframe MA + Price Jump Detection")
+    print("🎯 ABSOLUTE PRIORITY: Multi-timeframe MA7/MA25 crossover signals override all other strategies")
+    print("📈 STRATEGY: Golden Cross (BUY) | Death Cross (SELL) | Price Jump Detection")
+    print("⚡ ENHANCEMENTS: 30s loops | 15min cooldown | Multi-timeframe analysis")
     print("="*70)
 
     while True:
@@ -1743,7 +1746,7 @@ def run_continuously(interval_seconds=60):
             take_profit_price = None
 
         print("\n" + "="*50, flush=True)
-        print("🎯 MA7/MA25 DAY TRADING STRATEGY LOOP", flush=True)
+        print("🎯 ENHANCED MULTI-TIMEFRAME DAY TRADING LOOP", flush=True)
         print("="*50, flush=True)
 
         # Add timestamp for debugging
@@ -1786,10 +1789,26 @@ def run_continuously(interval_seconds=60):
 
         # Check trade timing to avoid overtrading
         time_since_last_trade = time.time() - last_trade_time
-        if time_since_last_trade < min_trade_interval:
-            remaining_time = min_trade_interval - int(time_since_last_trade)
-            print(f"⏳ Trade cooldown: {remaining_time}s remaining (avoiding overtrading)", flush=True)
-            time.sleep(min(interval_seconds, remaining_time + 10))
+        cooldown_required = min_trade_interval - int(time_since_last_trade)
+
+        # 🚀 PRICE JUMP DETECTION - Check for significant price movements
+        current_price = safe_api_call(exchange.fetch_ticker, 'BTC/USDC')['last']
+        price_jump = detect_price_jump(current_price, optimized_config)
+
+        if price_jump:
+            jump_analysis = get_price_jump_detector(optimized_config).get_jump_analysis(price_jump)
+            print(f"🚀 PRICE JUMP DETECTED: {price_jump.direction} {price_jump.change_pct:+.2f}% in {price_jump.duration_seconds:.0f}s")
+            print(f"   From ${price_jump.start_price:.2f} → ${price_jump.end_price:.2f}")
+            print(f"   Speed: {jump_analysis['speed']:.2f}%/min | Urgency: {jump_analysis['urgency']}")
+
+            # Override cooldown for significant jumps
+            if jump_analysis['override_cooldown'] and cooldown_required > 0:
+                print(f"⚡ COOLDOWN OVERRIDE: Price jump overriding {cooldown_required}s cooldown")
+                cooldown_required = 0
+
+        if cooldown_required > 0:
+            print(f"⏳ Trade cooldown: {cooldown_required}s remaining (avoiding overtrading)", flush=True)
+            time.sleep(min(interval_seconds, cooldown_required + 10))
             continue
 
         try:
@@ -1832,30 +1851,55 @@ def run_continuously(interval_seconds=60):
                 )
                 print(f"🔄 SYNC: No significant BTC position detected", flush=True)
 
-            # 🎯 STEP 1: MA7/MA25 CROSSOVER ANALYSIS (ABSOLUTE PRIORITY)
-            ma_signal = detect_ma_crossover_signals(df, current_price)
+            # 🎯 STEP 1: ENHANCED MULTI-TIMEFRAME MA ANALYSIS
+            print(f"\n🎯 MULTI-TIMEFRAME MA ANALYSIS:", flush=True)
 
-            print(f"\n🎯 MA7/MA25 CROSSOVER ANALYSIS:", flush=True)
-            print(f"   Action: {ma_signal['action']}", flush=True)
-            print(f"   Confidence: {ma_signal['confidence']:.3f}", flush=True)
-            print(f"   Type: {ma_signal.get('crossover_type', 'unknown')}", flush=True)
-            if 'ma7' in ma_signal and 'ma25' in ma_signal:
-                print(f"   MA7: {ma_signal['ma7']:.4f} | MA25: {ma_signal['ma25']:.4f}", flush=True)
-                print(f"   Spread: {ma_signal.get('spread', 0):.2f}%", flush=True)
+            # Get multi-timeframe signals
+            multi_signals = detect_multi_timeframe_ma_signals(exchange, 'BTC/USDC', current_price)
 
+            # Primary signal from combined analysis
+            ma_signal = multi_signals['combined']
+
+            # Display analysis
+            print(f"   📊 1m Signal: {multi_signals['1m']['action']} ({multi_signals['1m']['confidence']:.3f})", flush=True)
+            print(f"   📊 5m Signal: {multi_signals['5m']['action']} ({multi_signals['5m']['confidence']:.3f})", flush=True)
+            print(f"   🎯 Combined: {ma_signal['action']} ({ma_signal['confidence']:.3f})", flush=True)
+
+            if ma_signal.get('agreement'):
+                print(f"   ✅ Timeframe Agreement: {ma_signal['action']} signal", flush=True)
+            else:
+                print(f"   ⚠️ Timeframe Disagreement: Using cautious approach", flush=True)
+
+            # Display detailed reasons
             for reason in ma_signal.get('reasons', []):
                 print(f"   {reason}", flush=True)
 
-            # 🚨 ABSOLUTE PRIORITY: Execute MA7/MA25 signals immediately if confidence > 0.85
+            # Enhanced price jump integration
+            if price_jump and ma_signal['action'] != 'HOLD':
+                jump_analysis = get_price_jump_detector(optimized_config).get_jump_analysis(price_jump)
+
+                # Boost confidence if price jump aligns with MA signal
+                if (price_jump.direction == 'UP' and ma_signal['action'] == 'BUY') or \
+                   (price_jump.direction == 'DOWN' and ma_signal['action'] == 'SELL'):
+                    boost = 0.10 if jump_analysis['urgency'] == 'HIGH' else 0.05
+                    ma_signal['confidence'] = min(0.95, ma_signal['confidence'] + boost)
+                    print(f"   🚀 PRICE JUMP BOOST: {ma_signal['action']} confidence increased to {ma_signal['confidence']:.3f}", flush=True)
+
+            # 🚨 ABSOLUTE PRIORITY: Execute high-confidence multi-timeframe signals immediately
             if ma_signal['confidence'] > 0.85:
-                print(f"\n🚀 MA7/MA25 ABSOLUTE PRIORITY TRIGGERED!", flush=True)
+                print(f"\n🚀 MULTI-TIMEFRAME ABSOLUTE PRIORITY TRIGGERED!", flush=True)
                 print(f"🎯 EXECUTING: {ma_signal['action']} (confidence: {ma_signal['confidence']:.3f})", flush=True)
+
+                # Show timeframe breakdown
+                if 'signal_1m' in ma_signal and 'signal_5m' in ma_signal:
+                    print(f"   📊 1m contribution: {ma_signal['signal_1m']['confidence']:.3f}", flush=True)
+                    print(f"   📊 5m contribution: {ma_signal['signal_5m']['confidence']:.3f}", flush=True)
 
                 # Execute BUY signal
                 if ma_signal['action'] == 'BUY' and not holding_position:
                     position_size = calculate_position_size(current_price, 0.02, ma_signal['confidence'], total_portfolio_value)
                     if position_size > 0:
-                        print(f"🚀 MA7/MA25 PRIORITY BUY: ${position_size:.2f}")
+                        print(f"🚀 MULTI-TIMEFRAME PRIORITY BUY: ${position_size:.2f}")
                         order = place_intelligent_order('BTC/USDC', 'buy', amount_usd=position_size, use_limit=True)
 
                         if order:
@@ -1866,23 +1910,23 @@ def run_continuously(interval_seconds=60):
                                 take_profit_price=take_profit_price,
                                 trade_id=order.get('id')
                             )
-                            print(f"✅ MA7/MA25 CROSSOVER BUY EXECUTED")
+                            print(f"✅ MULTI-TIMEFRAME CROSSOVER BUY EXECUTED")
 
                 # Execute SELL signal
                 elif ma_signal['action'] == 'SELL' and holding_position:
                     btc_amount = balance['BTC']['free']
                     if btc_amount > 0:
-                        print(f"🚨 MA7/MA25 PRIORITY SELL: {btc_amount:.6f} BTC")
+                        print(f"🚨 MULTI-TIMEFRAME PRIORITY SELL: {btc_amount:.6f} BTC")
                         order = place_intelligent_order('BTC/USDC', 'sell', amount_usd=0, use_limit=True)
 
                         if order:
-                            state_manager.exit_trade("MA_CROSSOVER_SELL")
+                            state_manager.exit_trade("MULTI_TIMEFRAME_SELL")
                             holding_position = False
                             consecutive_losses = 0
-                            print(f"✅ MA7/MA25 CROSSOVER SELL EXECUTED")
+                            print(f"✅ MULTI-TIMEFRAME CROSSOVER SELL EXECUTED")
 
-                # Skip other strategies when MA priority is active
-                print("⏭️ Skipping other strategies - MA7/MA25 priority active")
+                # Skip other strategies when multi-timeframe priority is active
+                print("⏭️ Skipping other strategies - Multi-timeframe priority active")
                 time.sleep(interval_seconds)
                 continue
 
@@ -1916,26 +1960,26 @@ def run_continuously(interval_seconds=60):
                         time.sleep(300)  # 5 minute cooldown
                         continue
 
-            # 🎯 STEP 3: Fallback Strategies (when MA crossover signal is weak)
+            # 🎯 STEP 3: Fallback Strategies (when multi-timeframe signal is weak)
             if ma_signal['confidence'] < 0.85:
-                print(f"\n📊 FALLBACK STRATEGIES (MA confidence: {ma_signal['confidence']:.3f})")
+                print(f"\n📊 FALLBACK STRATEGIES (Multi-timeframe confidence: {ma_signal['confidence']:.3f})")
 
-                # Simple fallback: use MA signal even if moderate confidence
+                # Simple fallback: use multi-timeframe signal even if moderate confidence
                 signal = ma_signal.copy()
 
-                # If MA signal is weak, create a conservative HOLD signal
+                # If multi-timeframe signal is weak, create a conservative HOLD signal
                 if ma_signal['confidence'] < 0.5:
                     signal = {
                         'action': 'HOLD',
                         'confidence': 0.0,
-                        'reason': 'No clear MA crossover signal - awaiting better opportunity'
+                        'reason': 'No clear multi-timeframe signal - awaiting better opportunity'
                     }
 
-                # 🎯 BOOST MODERATE MA SIGNALS for day trading
+                # 🎯 BOOST MODERATE MULTI-TIMEFRAME SIGNALS for day trading
                 elif ma_signal['confidence'] >= 0.5:
                     signal['confidence'] = min(0.85, ma_signal['confidence'] + 0.15)  # Boost for day trading
-                    signal['reason'] = f"Boosted MA7/MA25 {ma_signal.get('crossover_type', 'signal')} for day trading"
-                    print(f"🎯 MA BOOST: Signal boosted to {signal['confidence']:.3f}")
+                    signal['reason'] = f"Boosted multi-timeframe {ma_signal.get('action', 'signal')} for day trading"
+                    print(f"🎯 MULTI-TIMEFRAME BOOST: Signal boosted to {signal['confidence']:.3f}")
 
                 # Display system status
                 print(f"\n🎯 SIGNAL ANALYSIS: {signal.get('action', 'N/A')} at ${current_price:.2f}", flush=True)
@@ -1946,10 +1990,10 @@ def run_continuously(interval_seconds=60):
                 strategy_config = optimized_config['strategy_parameters']
                 min_confidence = strategy_config['confidence_threshold']
 
-                # 🎯 LOWER THRESHOLD FOR MA SIGNALS (aggressive day trading)
-                if 'MA7/MA25' in signal.get('reason', ''):
-                    min_confidence *= 0.80  # 20% lower threshold for MA signals
-                    print(f"🎯 MA signal - reduced threshold to {min_confidence:.3f}")
+                # 🎯 LOWER THRESHOLD FOR MULTI-TIMEFRAME SIGNALS (aggressive day trading)
+                if 'multi-timeframe' in signal.get('reason', '').lower():
+                    min_confidence *= 0.80  # 20% lower threshold for multi-timeframe signals
+                    print(f"🎯 Multi-timeframe signal - reduced threshold to {min_confidence:.3f}")
 
                 print(f"   Required confidence: {min_confidence:.3f}", flush=True)
                 print(f"   Signal confidence: {signal.get('confidence', 0):.3f}", flush=True)
@@ -1958,8 +2002,8 @@ def run_continuously(interval_seconds=60):
                 if signal['action'] == 'BUY' and not holding_position and signal.get('confidence', 0) >= min_confidence:
                     position_size = calculate_position_size(current_price, 0.02, signal['confidence'], total_portfolio_value)
                     if position_size > 0:
-                        print(f"📥 MA-ENHANCED BUY signal - ${position_size:.2f} of BTC...")
-                        print(f"   MA7/MA25 confidence: {ma_signal['confidence']:.3f}")
+                        print(f"📥 MULTI-TIMEFRAME ENHANCED BUY signal - ${position_size:.2f} of BTC...")
+                        print(f"   Multi-timeframe confidence: {ma_signal['confidence']:.3f}")
                         print(f"   Final confidence: {signal['confidence']:.3f}")
 
                         order = place_intelligent_order('BTC/USDC', 'buy', amount_usd=position_size, use_limit=True)
@@ -1972,7 +2016,7 @@ def run_continuously(interval_seconds=60):
                                 take_profit_price=take_profit_price,
                                 trade_id=order.get('id')
                             )
-                            print(f"✅ BUY EXECUTED: MA-enhanced strategy")
+                            print(f"✅ BUY EXECUTED: Multi-timeframe enhanced strategy")
 
                 elif signal['action'] == 'SELL' and holding_position and signal.get('confidence', 0) >= min_confidence:
                     # Calculate current P&L
@@ -1982,17 +2026,17 @@ def run_continuously(interval_seconds=60):
 
                     execute_sell = True
 
-                    # Don't sell at loss unless MA strongly confirms
+                    # Don't sell at loss unless multi-timeframe strongly confirms
                     if current_pnl < -0.01:  # Losing more than 1%
                         if ma_signal['action'] != 'SELL' or ma_signal['confidence'] < 0.7:
                             execute_sell = False
-                            print(f"⚠️ SELL blocked - would realize {current_pnl:.2%} loss without strong MA confirmation")
+                            print(f"⚠️ SELL blocked - would realize {current_pnl:.2%} loss without strong multi-timeframe confirmation")
 
                     if execute_sell:
                         btc_amount = balance['BTC']['free']
                         if btc_amount > 0:
-                            print(f"📤 MA-ENHANCED SELL signal - Current P&L: {current_pnl:.2%}")
-                            print(f"   MA7/MA25 confidence: {ma_signal['confidence']:.3f}")
+                            print(f"📤 MULTI-TIMEFRAME ENHANCED SELL signal - Current P&L: {current_pnl:.2%}")
+                            print(f"   Multi-timeframe confidence: {ma_signal['confidence']:.3f}")
                             print(f"   Final confidence: {signal['confidence']:.3f}")
 
                             order = place_intelligent_order('BTC/USDC', 'sell', amount_usd=0, use_limit=True)
@@ -2001,10 +2045,10 @@ def run_continuously(interval_seconds=60):
                                 state_manager.exit_trade("MA_ENHANCED_SELL")
                                 holding_position = False
                                 consecutive_losses = 0
-                                print(f"✅ SELL EXECUTED: MA-enhanced strategy")
+                                print(f"✅ SELL EXECUTED: Multi-timeframe enhanced strategy")
 
                 else:
-                    print("⏸ No action taken - awaiting stronger MA7/MA25 signal", flush=True)
+                    print("⏸ No action taken - awaiting stronger multi-timeframe signal", flush=True)
 
         except Exception as e:
             print("❌ Error in trading loop:", e, flush=True)
@@ -2027,8 +2071,9 @@ def generate_reports():
 # =============================================================================
 
 if __name__ == "__main__":
-    print("🚀 STARTING AGGRESSIVE DAY TRADING BOT")
-    print("🎯 PRIMARY STRATEGY: MA7/MA25 Crossover")
+    print("🚀 STARTING ENHANCED AGGRESSIVE DAY TRADING BOT")
+    print("🎯 PRIMARY STRATEGY: Multi-Timeframe MA7/MA25 Crossover + Price Jump Detection")
+    print("⚡ IMPROVEMENTS: 30s loops, 15min cooldown, jump detection, multi-timeframe analysis")
     print("="*70)
 
     try:
@@ -2041,13 +2086,17 @@ if __name__ == "__main__":
 
         print(f"⏰ Trade Cooldown: {min_trade_interval//60} minutes | Stop Loss: {stop_loss_percentage:.1%} | Take Profit: {take_profit_percentage:.1%}")
         print(f"🔧 Confidence Threshold: {optimized_config['strategy_parameters']['confidence_threshold']:.3f}")
-        print("🎯 MA7/MA25 ABSOLUTE PRIORITY: Crossover signals override all other strategies")
+        print("🎯 MA7/MA25 ABSOLUTE PRIORITY: Multi-timeframe crossover signals override all other strategies")
         print("💡 Press Ctrl+C to stop and generate reports")
         print("="*70)
 
         # Test connection and start trading
         test_connection()
-        run_continuously()
+
+        # Use faster loop timing from config
+        loop_interval = optimized_config['system']['loop_interval_seconds']
+        print(f"⚡ Enhanced Loop Timing: {loop_interval}s intervals for better responsiveness")
+        run_continuously(loop_interval)
 
     except KeyboardInterrupt:
         print("\n🛑 Bot stopped by user")
