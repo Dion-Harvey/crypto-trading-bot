@@ -45,11 +45,11 @@ foreach ($file in $FILES) {
 
 Write-Host ""
 Write-Host "🔍 Verifying uploads on AWS..." -ForegroundColor Cyan
-ssh "$AWS_USER@$AWS_HOST" "cd $AWS_PATH && ls -la price_jump_detector.py multi_timeframe_ma.py"
+ssh "$AWS_USER@$AWS_HOST" "cd $AWS_PATH; ls -la price_jump_detector.py multi_timeframe_ma.py"
 
 Write-Host ""
 Write-Host "🧪 Testing imports on AWS..." -ForegroundColor Cyan
-ssh "$AWS_USER@$AWS_HOST" "cd $AWS_PATH && python3 test_imports.py"
+ssh "$AWS_USER@$AWS_HOST" "cd $AWS_PATH; python3 test_imports.py"
 
 Write-Host ""
 Write-Host "✅ AWS upload complete!" -ForegroundColor Green
