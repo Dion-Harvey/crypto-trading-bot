@@ -157,9 +157,27 @@
     "backup_config_on_change": true,
     "price_jump_detection": {
       "enabled": true,
-      "threshold_pct": 0.5,
-      "detection_window_seconds": 60,
-      "override_cooldown": true
+      "multi_timeframe": {
+        "spike": {
+          "window_seconds": 60,
+          "threshold_pct": 0.5
+        },
+        "short_trend": {
+          "window_seconds": 300,
+          "threshold_pct": 0.8
+        },
+        "medium_trend": {
+          "window_seconds": 900,
+          "threshold_pct": 1.2
+        },
+        "long_trend": {
+          "window_seconds": 1800,
+          "threshold_pct": 1.8
+        }
+      },
+      "override_cooldown": true,
+      "trend_tracking": true,
+      "momentum_analysis": true
     }
   },
   "_comment": "\u00f0\u0178\u017d\u00af DAY TRADER OPTIMIZED CONFIGURATION - More aggressive thresholds for active trading"

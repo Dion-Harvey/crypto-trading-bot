@@ -805,15 +805,15 @@ def detect_ma_crossover_signals(df, current_price):
     Returns high-confidence signals for immediate execution.
     """
     try:
-        if len(df) < 30:  # Need enough data for MA25
-            return {'action': 'HOLD', 'confidence': 0.0, 'reasons': ['Insufficient data for MA crossover']}
+        if len(df) < 30:
+            return {'action': 'HOLD', 'confidence': 0.0, 'reasons': ['Not enough data for MA crossover'], 'crossover_type': 'no_signal'}
 
         # Calculate moving averages
         ma_7 = df['close'].rolling(7).mean()
         ma_25 = df['close'].rolling(25).mean()
 
         if len(ma_7) < 2 or len(ma_25) < 2:
-            return {'action': 'HOLD', 'confidence': 0.0, 'reasons': ['Insufficient MA data']}
+            return {'action': 'HOLD', 'confidence': 0.0, 'reasons': ['Not enough MA data'], 'crossover_type': 'no_signal'}
 
         # Current and previous MA values
         ma7_current = ma_7.iloc[-1]
@@ -827,183 +827,66 @@ def detect_ma_crossover_signals(df, current_price):
 
         # Current trend strength
         ma_spread = abs(ma7_current - ma25_current) / ma25_current * 100  # Percentage spread
-        price_above_ma7 = current_price > ma7_current
-        price_above_ma25 = current_price > ma25_current
 
-        # Volume confirmation (if available)
-        volume_surge = False
-        try:
-            if 'volume' in df.columns and len(df) >= 10:
-                avg_volume = df['volume'].rolling(10).mean().iloc[-1]
-                current_volume = df['volume'].iloc[-1]
-                volume_surge = current_volume > (avg_volume * 1.2)  # 20% above average
-        except:
-            pass
-
-        # GOLDEN CROSS - ENHANCED BUY SIGNAL WITH CONFIRMATIONS
+        # --- FIX: Always return strong signal on crossover ---
         if golden_cross:
-            # Start with base confidence for crossover
-            confidence = 0.75  # Lower base, require confirmations
-
-            # Additional confirmation factors
-            confirmations = []
-
-            # Volume confirmation (most important)
-            if volume_surge:
-                confidence += 0.10
-                confirmations.append("📊 Volume surge confirms breakout")
-
-            # Price position confirmation
-            if price_above_ma7 and price_above_ma25:
-                confidence += 0.05
-                confirmations.append("📈 Price above both MAs")
-
-            # Momentum confirmation - check MA7 slope
-            ma7_momentum = (ma7_current - ma_7.iloc[-3]) / ma_7.iloc[-3] if len(ma_7) >= 3 else 0
-            if ma7_momentum > 0.003:  # 0.3% momentum minimum
-                confidence += 0.05
-                confirmations.append("🚀 MA7 upward momentum")
-
-            # Spread confirmation (wider spread = stronger signal)
-            if ma_spread > 0.3:  # 0.3% spread minimum for day trading
-                confidence += 0.05
-                confirmations.append(f"📏 Strong spread: {ma_spread:.2f}%")
-            elif ma_spread < 0.1:  # Penalize very weak spreads
-                confidence -= 0.10
-                confirmations.append(f"⚠️ Weak spread: {ma_spread:.2f}%")
-
-            # Trend context - check if we're in overall uptrend
-            if len(ma_25) >= 5:
-                ma25_trend = (ma25_current - ma_25.iloc[-5]) / ma_25.iloc[-5]
-                if ma25_trend > 0.01:  # MA25 itself trending up
-                    confidence += 0.03
-                    confirmations.append("📈 MA25 trending upward")
-
-            reasons = [
-                "🟢 GOLDEN CROSS: MA7 crossed above MA25",
-                f"📈 MA7: {ma7_current:.2f} > MA25: {ma25_current:.2f}",
-                f"💰 Spread: {ma_spread:.2f}%",
-                "🎯 DAY TRADING BUY SIGNAL"
-            ]
-
-            reasons.extend(confirmations)
-
             return {
                 'action': 'BUY',
-                'confidence': min(0.95, confidence),  # Cap at 95%
-                'reasons': reasons,
+                'confidence': 1.0,
+                'reasons': [
+                    f"Golden Cross: MA7 crossed above MA25",
+                    f"MA7 prev: {ma7_previous:.4f} → {ma7_current:.4f}",
+                    f"MA25 prev: {ma25_previous:.4f} → {ma25_current:.4f}",
+                    f"Spread: {ma_spread:.2f}%"
+                ],
                 'ma7': ma7_current,
                 'ma25': ma25_current,
                 'spread': ma_spread,
                 'crossover_type': 'golden_cross'
             }
-
-        # DEATH CROSS - ENHANCED SELL SIGNAL WITH CONFIRMATIONS
         elif death_cross:
-            # Start with base confidence for crossover
-            confidence = 0.75  # Lower base, require confirmations
-
-            # Additional confirmation factors
-            confirmations = []
-
-            # Volume confirmation (most important)
-            if volume_surge:
-                confidence += 0.10
-                confirmations.append("📊 Volume surge confirms breakdown")
-
-            # Price position confirmation
-            if not price_above_ma7 and not price_above_ma25:
-                confidence += 0.05
-                confirmations.append("📉 Price below both MAs")
-
-            # Momentum confirmation - check MA7 slope
-            ma7_momentum = (ma7_current - ma_7.iloc[-3]) / ma_7.iloc[-3] if len(ma_7) >= 3 else 0
-            if ma7_momentum < -0.003:  # 0.3% downward momentum minimum
-                confidence += 0.05
-                confirmations.append("📉 MA7 downward momentum")
-
-            # Spread confirmation
-            if ma_spread > 0.3:  # 0.3% spread minimum
-                confidence += 0.05
-                confirmations.append(f"📏 Strong spread: {ma_spread:.2f}%")
-            elif ma_spread < 0.1:  # Penalize very weak spreads
-                confidence -= 0.10
-                confirmations.append(f"⚠️ Weak spread: {ma_spread:.2f}%")
-
-            # Trend context - check if we're in overall downtrend
-            if len(ma_25) >= 5:
-                ma25_trend = (ma25_current - ma_25.iloc[-5]) / ma_25.iloc[-5]
-                if ma25_trend < -0.01:  # MA25 itself trending down
-                    confidence += 0.03
-                    confirmations.append("📉 MA25 trending downward")
-
-            reasons = [
-                "🔴 DEATH CROSS: MA7 crossed below MA25",
-                f"📉 MA7: {ma7_current:.2f} < MA25: {ma25_current:.2f}",
-                f"💸 Spread: {ma_spread:.2f}%",
-                "🎯 DAY TRADING SELL SIGNAL"
-            ]
-
-            reasons.extend(confirmations)
-
             return {
                 'action': 'SELL',
-                'confidence': min(0.95, confidence),  # Cap at 95%
-                'reasons': reasons,
+                'confidence': 1.0,
+                'reasons': [
+                    f"Death Cross: MA7 crossed below MA25",
+                    f"MA7 prev: {ma7_previous:.4f} → {ma7_current:.4f}",
+                    f"MA25 prev: {ma25_previous:.4f} → {ma25_current:.4f}",
+                    f"Spread: {ma_spread:.2f}%"
+                ],
                 'ma7': ma7_current,
                 'ma25': ma25_current,
                 'spread': ma_spread,
                 'crossover_type': 'death_cross'
             }
 
-        # STRONG TREND CONTINUATION SIGNALS
-        elif ma7_current > ma25_current and ma_spread > 1.0:  # Strong bullish trend
-            if price_above_ma7 and price_above_ma25:
-                confidence = 0.75 + (min(ma_spread, 5) / 5 * 0.15)  # Up to 0.90 confidence
-
-                reasons = [
-                    f"📈 Strong bullish trend: MA7 ({ma7_current:.4f}) > MA25 ({ma25_current:.4f})",
-                    f"💪 MA spread: {ma_spread:.2f}% indicates momentum",
-                    f"🎯 Price above both MAs: Trend continuation signal"
-                ]
-
-                if volume_surge:
-                    confidence = min(confidence + 0.05, 0.95)
-                    reasons.append("📊 Volume supports the trend")
-
-                return {
-                    'action': 'BUY',
-                    'confidence': confidence,
-                    'reasons': reasons,
-                    'ma7': ma7_current,
-                    'ma25': ma25_current,
-                    'spread': ma_spread,
-                    'crossover_type': 'bullish_trend'
-                }
-
-        elif ma7_current < ma25_current and ma_spread > 1.0:  # Strong bearish trend
-            if not price_above_ma7 and not price_above_ma25:
-                confidence = 0.75 + (min(ma_spread, 5) / 5 * 0.15)  # Up to 0.90 confidence
-
-                reasons = [
-                    f"📉 Strong bearish trend: MA7 ({ma7_current:.4f}) < MA25 ({ma25_current:.4f})",
-                    f"💪 MA spread: {ma_spread:.2f}% indicates momentum",
-                    f"🎯 Price below both MAs: Trend continuation signal"
-                ]
-
-                if volume_surge:
-                    confidence = min(confidence + 0.05, 0.95)
-                    reasons.append("📊 Volume supports the trend")
-
-                return {
-                    'action': 'SELL',
-                    'confidence': confidence,
-                    'reasons': reasons,
-                    'ma7': ma7_current,
-                    'ma25': ma25_current,
-                    'spread': ma_spread,
-                    'crossover_type': 'bearish_trend'
-                }
+        # If not a crossover, check for strong trend (optional, can be tuned)
+        if ma7_current > ma25_current and ma_spread > 1.0:
+            return {
+                'action': 'BUY',
+                'confidence': 0.6,
+                'reasons': [
+                    f"MA7 above MA25 with spread {ma_spread:.2f}%",
+                    f"MA7: {ma7_current:.4f}, MA25: {ma25_current:.4f}"
+                ],
+                'ma7': ma7_current,
+                'ma25': ma25_current,
+                'spread': ma_spread,
+                'crossover_type': 'ma7_above_ma25'
+            }
+        elif ma7_current < ma25_current and ma_spread > 1.0:
+            return {
+                'action': 'SELL',
+                'confidence': 0.6,
+                'reasons': [
+                    f"MA7 below MA25 with spread {ma_spread:.2f}%",
+                    f"MA7: {ma7_current:.4f}, MA25: {ma25_current:.4f}"
+                ],
+                'ma7': ma7_current,
+                'ma25': ma25_current,
+                'spread': ma_spread,
+                'crossover_type': 'ma7_below_ma25'
+            }
 
         # NO CLEAR SIGNAL
         return {
@@ -1022,7 +905,7 @@ def detect_ma_crossover_signals(df, current_price):
 
     except Exception as e:
         log_message(f"❌ Error in MA crossover detection: {e}")
-        return {'action': 'HOLD', 'confidence': 0.0, 'reasons': [f'MA crossover error: {e}']}
+        return {'action': 'HOLD', 'confidence': 0.0, 'reasons': [f'MA crossover error: {e}'], 'crossover_type': 'error'}
 
 # =============================================================================
 # DAILY HIGH/LOW PROFIT MAXIMIZATION STRATEGIES
@@ -1523,6 +1406,7 @@ def select_optimal_high_low_strategy(strategy_signals, df, current_price):
                 strategy_scores[strategy_name] = score
 
         # Select highest scoring strategy
+
         if strategy_scores:
             best_strategy = max(strategy_scores.items(), key=lambda x: x[1])
             strategy_name, score = best_strategy
@@ -1730,10 +1614,11 @@ def run_continuously(interval_seconds=60):
     global holding_position, last_trade_time, consecutive_losses, active_trade_index, entry_price, stop_loss_price, take_profit_price
 
     print("\n" + "="*70)
-    print("🚀 ENHANCED DAY TRADING BOT - Multi-Timeframe MA + Price Jump Detection")
+    print("🚀 ENHANCED DAY TRADING BOT - Multi-Timeframe MA + Advanced Price Detection")
     print("🎯 ABSOLUTE PRIORITY: Multi-timeframe MA7/MA25 crossover signals override all other strategies")
-    print("📈 STRATEGY: Golden Cross (BUY) | Death Cross (SELL) | Price Jump Detection")
-    print("⚡ ENHANCEMENTS: 30s loops | 15min cooldown | Multi-timeframe analysis")
+    print("📈 STRATEGY: Golden Cross (BUY) | Death Cross (SELL) | Multi-Timeframe Price Detection")
+    print("⚡ ENHANCEMENTS: 30s loops | 15min cooldown | Multi-timeframe analysis | Sustained trend tracking")
+    print("🔍 DETECTION: Spike(0.5%/1min) | Short(0.8%/5min) | Medium(1.2%/15min) | Long(1.8%/30min)")
     print("="*70)
 
     while True:
@@ -1791,20 +1676,36 @@ def run_continuously(interval_seconds=60):
         time_since_last_trade = time.time() - last_trade_time
         cooldown_required = min_trade_interval - int(time_since_last_trade)
 
-        # 🚀 PRICE JUMP DETECTION - Check for significant price movements
+        # 🚀 ENHANCED PRICE JUMP DETECTION - Multi-timeframe movement analysis
         current_price = safe_api_call(exchange.fetch_ticker, 'BTC/USDC')['last']
         price_jump = detect_price_jump(current_price, optimized_config)
 
         if price_jump:
             jump_analysis = get_price_jump_detector(optimized_config).get_jump_analysis(price_jump)
-            print(f"🚀 PRICE JUMP DETECTED: {price_jump.direction} {price_jump.change_pct:+.2f}% in {price_jump.duration_seconds:.0f}s")
-            print(f"   From ${price_jump.start_price:.2f} → ${price_jump.end_price:.2f}")
-            print(f"   Speed: {jump_analysis['speed']:.2f}%/min | Urgency: {jump_analysis['urgency']}")
+            timeframe = jump_analysis.get('timeframe', 'spike')
+            urgency_score = jump_analysis.get('urgency_score', 0)
 
-            # Override cooldown for significant jumps
+            print(f"🚀 {timeframe.upper()} MOVEMENT DETECTED: {price_jump.direction} {price_jump.change_pct:+.2f}% in {price_jump.duration_seconds:.0f}s")
+            print(f"   From ${price_jump.start_price:.2f} → ${price_jump.end_price:.2f}")
+            print(f"   Timeframe: {timeframe} | Speed: {jump_analysis['speed']:.2f}%/min")
+            print(f"   Urgency: {jump_analysis['urgency']} (score: {urgency_score:.1f})")
+            print(f"   Trend Alignment: {jump_analysis['trend_alignment']}")
+            print(f"   Momentum: {jump_analysis['momentum_strength']:.2f}")
+
+            # Enhanced cooldown override logic
             if jump_analysis['override_cooldown'] and cooldown_required > 0:
-                print(f"⚡ COOLDOWN OVERRIDE: Price jump overriding {cooldown_required}s cooldown")
+                print(f"⚡ COOLDOWN OVERRIDE: {timeframe} movement overriding {cooldown_required}s cooldown")
                 cooldown_required = 0
+
+        # Get current trend state for additional context
+        trend_state = get_price_jump_detector(optimized_config).get_trend_state()
+        if trend_state['direction'] and trend_state['is_sustained']:
+            print(f"📈 SUSTAINED TREND: {trend_state['direction']} trend active for {trend_state['duration_seconds']:.0f}s")
+            print(f"   Peak change: {trend_state['peak_change_pct']:+.2f}% | Strength: {trend_state['strength']:.2f}")
+
+        # Display enhanced price jump status periodically
+        if int(time.time()) % 300 == 0:  # Every 5 minutes
+            display_enhanced_price_jump_status()
 
         if cooldown_required > 0:
             print(f"⏳ Trade cooldown: {cooldown_required}s remaining (avoiding overtrading)", flush=True)
@@ -1874,16 +1775,47 @@ def run_continuously(interval_seconds=60):
             for reason in ma_signal.get('reasons', []):
                 print(f"   {reason}", flush=True)
 
-            # Enhanced price jump integration
+            # Enhanced multi-timeframe price jump integration
             if price_jump and ma_signal['action'] != 'HOLD':
                 jump_analysis = get_price_jump_detector(optimized_config).get_jump_analysis(price_jump)
+                timeframe = jump_analysis.get('timeframe', 'spike')
+                urgency_score = jump_analysis.get('urgency_score', 0)
+                trend_alignment = jump_analysis.get('trend_alignment', 'NEUTRAL')
 
-                # Boost confidence if price jump aligns with MA signal
+                # Enhanced confidence boost based on multiple factors
+                alignment_bonus = 0
                 if (price_jump.direction == 'UP' and ma_signal['action'] == 'BUY') or \
                    (price_jump.direction == 'DOWN' and ma_signal['action'] == 'SELL'):
-                    boost = 0.10 if jump_analysis['urgency'] == 'HIGH' else 0.05
-                    ma_signal['confidence'] = min(0.95, ma_signal['confidence'] + boost)
-                    print(f"   🚀 PRICE JUMP BOOST: {ma_signal['action']} confidence increased to {ma_signal['confidence']:.3f}", flush=True)
+
+                    # Base boost depends on timeframe
+                    timeframe_boosts = {
+                        'spike': 0.15,        # High boost for rapid spikes
+                        'short_trend': 0.12,  # Good boost for short trends
+                        'medium_trend': 0.10, # Medium boost for medium trends
+                        'long_trend': 0.08    # Lower boost for long trends
+                    }
+
+                    base_boost = timeframe_boosts.get(timeframe, 0.10)
+
+                    # Additional boost for high urgency
+                    if urgency_score >= 6.0:
+                        base_boost *= 1.5
+                    elif urgency_score >= 4.0:
+                        base_boost *= 1.2
+
+                    # Additional boost for trend alignment
+                    if trend_alignment == 'ALIGNED':
+                        base_boost *= 1.3
+
+                    alignment_bonus = base_boost
+                    ma_signal['confidence'] = min(0.95, ma_signal['confidence'] + alignment_bonus)
+
+                    print(f"   🚀 {timeframe.upper()} MOVEMENT BOOST: {ma_signal['action']} confidence +{alignment_bonus:.3f} → {ma_signal['confidence']:.3f}", flush=True)
+                    print(f"   🎯 Factors: Urgency={urgency_score:.1f}, Alignment={trend_alignment}, Timeframe={timeframe}", flush=True)
+
+                # Counter-trend warning
+                elif trend_alignment == 'COUNTER_TREND':
+                    print(f"   ⚠️ COUNTER-TREND MOVEMENT: {timeframe} {price_jump.direction} vs MA signal {ma_signal['action']}", flush=True)
 
             # 🚨 ABSOLUTE PRIORITY: Execute high-confidence multi-timeframe signals immediately
             if ma_signal['confidence'] > 0.85:
@@ -1915,15 +1847,30 @@ def run_continuously(interval_seconds=60):
                 # Execute SELL signal
                 elif ma_signal['action'] == 'SELL' and holding_position:
                     btc_amount = balance['BTC']['free']
-                    if btc_amount > 0:
+                    # --- ENHANCEMENT: Prevent premature sell, enforce min hold time ---
+                    min_hold_time = optimized_config.get('risk_management', {}).get('minimum_hold_time_minutes', 15) * 60
+                    trade_start_time = None
+                    if hasattr(state_manager, 'get_trade_start_time'):
+                        trade_start_time = state_manager.get_trade_start_time()
+                    can_sell = True
+                    sell_reason = "MULTI_TIMEFRAME_SELL"
+                    if trade_start_time and (time.time() - trade_start_time) < min_hold_time:
+                        can_sell = False
+                        sell_reason = f"BLOCKED: Minimum hold time active ({min_hold_time/60:.1f} min), only {((time.time() - trade_start_time)/60):.1f} min elapsed"
+                        print(f"⏳ SELL BLOCKED: {sell_reason}")
+                        log_message(f"⏳ SELL BLOCKED: {sell_reason}")
+                    if can_sell and btc_amount > 0:
                         print(f"🚨 MULTI-TIMEFRAME PRIORITY SELL: {btc_amount:.6f} BTC")
                         order = place_intelligent_order('BTC/USDC', 'sell', amount_usd=0, use_limit=True)
-
                         if order:
                             state_manager.exit_trade("MULTI_TIMEFRAME_SELL")
                             holding_position = False
                             consecutive_losses = 0
                             print(f"✅ MULTI-TIMEFRAME CROSSOVER SELL EXECUTED")
+                            log_message(f"✅ SELL EXECUTED: Multi-timeframe priority | Reason: {sell_reason}")
+                    elif not can_sell:
+                        log_message(f"❌ SELL NOT EXECUTED: {sell_reason}")
+                        print(f"❌ SELL NOT EXECUTED: {sell_reason}")
 
                 # Skip other strategies when multi-timeframe priority is active
                 print("⏭️ Skipping other strategies - Multi-timeframe priority active")
@@ -1938,6 +1885,9 @@ def run_continuously(interval_seconds=60):
                 if risk_action in ['STOP_LOSS', 'TAKE_PROFIT', 'EMERGENCY_EXIT', 'MAX_DRAWDOWN_HIT', 'TRAILING_STOP']:
                     print(f"🚨 RISK MANAGEMENT TRIGGERED: {risk_action}")
                     btc_amount = balance['BTC']['free']
+                    # --- ENHANCEMENT: Always allow emergency/stop-loss exits, but log reason ---
+                    sell_reason = f"RISK_MANAGEMENT: {risk_action}"
+                    order = None
                     if btc_amount > 0:
                         order = safe_api_call(exchange.create_market_order, 'BTC/USDC', 'sell', btc_amount)
 
@@ -1949,6 +1899,11 @@ def run_continuously(interval_seconds=60):
                             state_manager.update_consecutive_losses(consecutive_losses)
 
                         # Log the trade
+                        log_message(f"✅ SELL EXECUTED: {sell_reason}")
+                        print(f"✅ SELL EXECUTED: {sell_reason}")
+                    else:
+                        log_message(f"❌ SELL NOT EXECUTED: {sell_reason} (no BTC available)")
+                        print(f"❌ SELL NOT EXECUTED: {sell_reason} (no BTC available)")
                         updated_balance = safe_api_call(exchange.fetch_balance)
                         log_trade("SELL", "BTC/USDC", btc_amount, current_price, updated_balance['USDC']['free'])
 
@@ -2072,8 +2027,9 @@ def generate_reports():
 
 if __name__ == "__main__":
     print("🚀 STARTING ENHANCED AGGRESSIVE DAY TRADING BOT")
-    print("🎯 PRIMARY STRATEGY: Multi-Timeframe MA7/MA25 Crossover + Price Jump Detection")
-    print("⚡ IMPROVEMENTS: 30s loops, 15min cooldown, jump detection, multi-timeframe analysis")
+    print("🎯 PRIMARY STRATEGY: Multi-Timeframe MA7/MA25 Crossover + Advanced Price Detection")
+    print("⚡ IMPROVEMENTS: 30s loops, 15min cooldown, multi-timeframe jump detection, sustained trend tracking")
+    print("🔍 DETECTION SYSTEM: Multi-timeframe price movement analysis (spike/short/medium/long)")
     print("="*70)
 
     try:
@@ -2112,3 +2068,25 @@ if __name__ == "__main__":
         except:
             print("⚠️ Report generation failed")
         print("🔧 Check logs for debugging information")
+
+def display_enhanced_price_jump_status():
+    """Display enhanced price jump detection status"""
+    try:
+        detector = get_price_jump_detector(optimized_config)
+        status = detector.get_status()
+        trend_state = status['current_trend']
+
+        print(f"🔍 ENHANCED PRICE DETECTION STATUS:")
+        print(f"   📊 History: {status['price_history_size']} points | Recent jumps: {status['recent_jumps_count']}")
+        print(f"   ⏱️ Activity (5m/15m/30m): {status['last_5min_jumps']}/{status['last_15min_jumps']}/{status['last_30min_jumps']}")
+        print(f"   📈 Current Trend: {trend_state['direction'] or 'NEUTRAL'} (strength: {trend_state['strength']:.2f})")
+
+        if trend_state['direction'] and trend_state['is_sustained']:
+            print(f"   🎯 Sustained {trend_state['direction']} trend: {trend_state['duration_seconds']:.0f}s, peak {trend_state['peak_change_pct']:+.2f}%")
+
+        activity = status['timeframe_activity']
+        if sum(activity.values()) > 0:
+            print(f"   🎯 Timeframe activity: Spike:{activity['spike']} | Short:{activity['short_trend']} | Medium:{activity['medium_trend']} | Long:{activity['long_trend']}")
+
+    except Exception as e:
+        print(f"⚠️ Error displaying price jump status: {e}")

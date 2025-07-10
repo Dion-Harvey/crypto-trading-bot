@@ -18,29 +18,46 @@ def detect_multi_timeframe_ma_signals(exchange, symbol: str, current_price: floa
     signals = {
         '1m': {'action': 'HOLD', 'confidence': 0.0, 'reasons': []},
         '5m': {'action': 'HOLD', 'confidence': 0.0, 'reasons': []},
+        '15m': {'action': 'HOLD', 'confidence': 0.0, 'reasons': []},
+        '30m': {'action': 'HOLD', 'confidence': 0.0, 'reasons': []},
+        '60m': {'action': 'HOLD', 'confidence': 0.0, 'reasons': []},
+        '120m': {'action': 'HOLD', 'confidence': 0.0, 'reasons': []},
         'combined': {'action': 'HOLD', 'confidence': 0.0, 'reasons': []}
     }
-    
+
     try:
-        # Get data for both timeframes
+
+        # Get data for all timeframes
         df_1m = fetch_ohlcv(exchange, symbol, '1m', 50)
         df_5m = fetch_ohlcv(exchange, symbol, '5m', 50)
-        
-        # Analyze 1-minute timeframe (fast signals)
+        df_15m = fetch_ohlcv(exchange, symbol, '15m', 50)
+        df_30m = fetch_ohlcv(exchange, symbol, '30m', 50)
+        df_60m = fetch_ohlcv(exchange, symbol, '60m', 50)
+        df_120m = fetch_ohlcv(exchange, symbol, '120m', 50)
+
+        # Analyze each timeframe
         signals['1m'] = _analyze_timeframe_ma(df_1m, current_price, '1m')
-        
-        # Analyze 5-minute timeframe (trend confirmation)
         signals['5m'] = _analyze_timeframe_ma(df_5m, current_price, '5m')
-        
-        # Combine signals for final decision
-        signals['combined'] = _combine_timeframe_signals(signals['1m'], signals['5m'])
-        
+        signals['15m'] = _analyze_timeframe_ma(df_15m, current_price, '15m')
+        signals['30m'] = _analyze_timeframe_ma(df_30m, current_price, '30m')
+        signals['60m'] = _analyze_timeframe_ma(df_60m, current_price, '60m')
+        signals['120m'] = _analyze_timeframe_ma(df_120m, current_price, '120m')
+
+        # Combine signals for final decision (longest actionable timeframe takes priority)
+        signals['combined'] = _combine_multi_timeframe_signals([
+            signals['1m'], signals['5m'], signals['15m'], signals['30m'], signals['60m'], signals['120m']
+        ])
+
         return signals
-        
+
     except Exception as e:
         return {
             '1m': {'action': 'HOLD', 'confidence': 0.0, 'reasons': [f'Error: {e}']},
             '5m': {'action': 'HOLD', 'confidence': 0.0, 'reasons': [f'Error: {e}']},
+            '15m': {'action': 'HOLD', 'confidence': 0.0, 'reasons': [f'Error: {e}']},
+            '30m': {'action': 'HOLD', 'confidence': 0.0, 'reasons': [f'Error: {e}']},
+            '60m': {'action': 'HOLD', 'confidence': 0.0, 'reasons': [f'Error: {e}']},
+            '120m': {'action': 'HOLD', 'confidence': 0.0, 'reasons': [f'Error: {e}']},
             'combined': {'action': 'HOLD', 'confidence': 0.0, 'reasons': [f'Multi-timeframe error: {e}']}
         }
 
@@ -85,71 +102,34 @@ def _analyze_timeframe_ma(df: pd.DataFrame, current_price: float, timeframe: str
     # Timeframe-specific confidence adjustments
     base_confidence = 0.65 if timeframe == '1m' else 0.75  # 5m gets higher base confidence
     
-    # GOLDEN CROSS ANALYSIS
+    # GOLDEN CROSS ANALYSIS (ABSOLUTE PRIORITY)
     if golden_cross:
-        confidence = base_confidence
-        reasons = [f"🟢 {timeframe} GOLDEN CROSS: MA7 > MA25"]
-        
-        # Confirmations
-        if volume_surge:
-            confidence += 0.10
-            reasons.append(f"📊 {timeframe} volume surge")
-        
-        if price_above_ma7 and price_above_ma25:
-            confidence += 0.05
-            reasons.append(f"📈 Price above both {timeframe} MAs")
-        
-        if ma_spread > (0.2 if timeframe == '1m' else 0.4):
-            confidence += 0.05
-            reasons.append(f"📏 Strong {timeframe} spread: {ma_spread:.2f}%")
-        
-        # Momentum check
-        if len(ma_7) >= 3:
-            ma7_momentum = (ma7_current - ma_7.iloc[-3]) / ma_7.iloc[-3]
-            if ma7_momentum > 0.002:
-                confidence += 0.05
-                reasons.append(f"🚀 {timeframe} MA7 momentum")
-        
         return {
             'action': 'BUY',
-            'confidence': min(0.95, confidence),
-            'reasons': reasons,
+            'confidence': 1.0,
+            'reasons': [
+                f"🟢 {timeframe} GOLDEN CROSS: MA7 crossed above MA25",
+                f"MA7 prev: {ma7_previous:.4f} → {ma7_current:.4f}",
+                f"MA25 prev: {ma25_previous:.4f} → {ma25_current:.4f}",
+                f"Spread: {ma_spread:.2f}%"
+            ],
             'ma7': ma7_current,
             'ma25': ma25_current,
             'spread': ma_spread,
             'timeframe': timeframe,
             'crossover_type': 'golden_cross'
         }
-    
-    # DEATH CROSS ANALYSIS
+    # DEATH CROSS ANALYSIS (ABSOLUTE PRIORITY)
     elif death_cross:
-        confidence = base_confidence
-        reasons = [f"🔴 {timeframe} DEATH CROSS: MA7 < MA25"]
-        
-        # Confirmations
-        if volume_surge:
-            confidence += 0.10
-            reasons.append(f"📊 {timeframe} volume surge")
-        
-        if not price_above_ma7 and not price_above_ma25:
-            confidence += 0.05
-            reasons.append(f"📉 Price below both {timeframe} MAs")
-        
-        if ma_spread > (0.2 if timeframe == '1m' else 0.4):
-            confidence += 0.05
-            reasons.append(f"📏 Strong {timeframe} spread: {ma_spread:.2f}%")
-        
-        # Momentum check
-        if len(ma_7) >= 3:
-            ma7_momentum = (ma7_current - ma_7.iloc[-3]) / ma_7.iloc[-3]
-            if ma7_momentum < -0.002:
-                confidence += 0.05
-                reasons.append(f"📉 {timeframe} MA7 momentum")
-        
         return {
             'action': 'SELL',
-            'confidence': min(0.95, confidence),
-            'reasons': reasons,
+            'confidence': 1.0,
+            'reasons': [
+                f"🔴 {timeframe} DEATH CROSS: MA7 crossed below MA25",
+                f"MA7 prev: {ma7_previous:.4f} → {ma7_current:.4f}",
+                f"MA25 prev: {ma25_previous:.4f} → {ma25_current:.4f}",
+                f"Spread: {ma_spread:.2f}%"
+            ],
             'ma7': ma7_current,
             'ma25': ma25_current,
             'spread': ma_spread,
@@ -219,75 +199,40 @@ def _analyze_timeframe_ma(df: pd.DataFrame, current_price: float, timeframe: str
         'crossover_type': 'no_signal'
     }
 
-def _combine_timeframe_signals(signal_1m: Dict, signal_5m: Dict) -> Dict:
-    """Combine signals from different timeframes for final decision"""
-    
-    # Both timeframes agree on direction
-    if signal_1m['action'] == signal_5m['action'] and signal_1m['action'] != 'HOLD':
-        # Strong agreement - boost confidence
-        combined_confidence = (signal_1m['confidence'] + signal_5m['confidence']) / 2
-        combined_confidence = min(0.95, combined_confidence + 0.10)  # Boost for agreement
-        
-        reasons = [
-            f"🎯 MULTI-TIMEFRAME AGREEMENT: {signal_1m['action']}",
-            f"📈 1m confidence: {signal_1m['confidence']:.3f}",
-            f"📈 5m confidence: {signal_5m['confidence']:.3f}",
-            f"🚀 Combined confidence: {combined_confidence:.3f}"
-        ]
-        
-        return {
-            'action': signal_1m['action'],
-            'confidence': combined_confidence,
-            'reasons': reasons,
-            'signal_1m': signal_1m,
-            'signal_5m': signal_5m,
-            'agreement': True
-        }
-    
-    # Timeframes disagree - use 5m as tie-breaker (more reliable)
-    elif signal_1m['action'] != signal_5m['action']:
-        # 5m signal takes precedence, but with reduced confidence
-        primary_signal = signal_5m if signal_5m['action'] != 'HOLD' else signal_1m
-        
-        # Reduce confidence due to disagreement
-        combined_confidence = primary_signal['confidence'] * 0.7
-        
-        reasons = [
-            f"⚠️ TIMEFRAME DISAGREEMENT: Using {primary_signal.get('timeframe', '5m')} signal",
-            f"📊 1m: {signal_1m['action']} ({signal_1m['confidence']:.3f})",
-            f"📊 5m: {signal_5m['action']} ({signal_5m['confidence']:.3f})",
-            f"🎯 Final: {primary_signal['action']} ({combined_confidence:.3f})"
-        ]
-        
-        return {
-            'action': primary_signal['action'],
-            'confidence': combined_confidence,
-            'reasons': reasons,
-            'signal_1m': signal_1m,
-            'signal_5m': signal_5m,
-            'agreement': False
-        }
-    
-    # Both HOLD or low confidence
-    else:
-        # Take the higher confidence signal if any
-        if signal_1m['confidence'] > signal_5m['confidence']:
-            primary_signal = signal_1m
-        else:
-            primary_signal = signal_5m
-        
-        reasons = [
-            "📊 MULTI-TIMEFRAME ANALYSIS: No strong signals",
-            f"📈 1m: {signal_1m['action']} ({signal_1m['confidence']:.3f})",
-            f"📈 5m: {signal_5m['action']} ({signal_5m['confidence']:.3f})",
-            "⏳ Waiting for clearer multi-timeframe alignment"
-        ]
-        
-        return {
-            'action': 'HOLD',
-            'confidence': max(signal_1m['confidence'], signal_5m['confidence']) * 0.8,
-            'reasons': reasons,
-            'signal_1m': signal_1m,
-            'signal_5m': signal_5m,
-            'agreement': False
-        }
+
+def _combine_multi_timeframe_signals(signals: list) -> Dict:
+    """
+    Combine signals from multiple timeframes (1m, 5m, 15m, 30m, 60m, 120m) for final decision.
+    The longest actionable timeframe (not HOLD) takes priority.
+    If all HOLD, return HOLD.
+    """
+    # Priority: 120m > 60m > 30m > 15m > 5m > 1m
+    tf_order = ['120m', '60m', '30m', '15m', '5m', '1m']
+    tf_signal_map = {s.get('timeframe', tf): s for s, tf in zip(signals, tf_order)}
+
+    for tf in tf_order:
+        sig = tf_signal_map.get(tf, {})
+        if sig.get('action', 'HOLD') != 'HOLD' and sig.get('confidence', 0.0) > 0.5:
+            # Use this as the final signal
+            reasons = [
+                f"⏳ {tf} signal takes priority: {sig['action']} (confidence: {sig['confidence']:.2f})"
+            ] + sig.get('reasons', [])
+            return {
+                'action': sig['action'],
+                'confidence': sig['confidence'],
+                'reasons': reasons,
+                'priority_timeframe': tf,
+                'signals': tf_signal_map
+            }
+    # If all HOLD or weak, return HOLD with reasons
+    reasons = [f"No actionable signal from any timeframe (1m, 5m, 15m, 30m, 60m, 120m)"]
+    for tf in tf_order:
+        sig = tf_signal_map.get(tf, {})
+        reasons.append(f"{tf}: {sig.get('action', 'HOLD')} (confidence: {sig.get('confidence', 0.0):.2f})")
+    return {
+        'action': 'HOLD',
+        'confidence': 0.0,
+        'reasons': reasons,
+        'priority_timeframe': None,
+        'signals': tf_signal_map
+    }
