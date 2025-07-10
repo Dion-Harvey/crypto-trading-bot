@@ -17,6 +17,11 @@ strategy_performance.json
 # Backup Files
 *.backup_*
 enhanced_config.json.backup_*
+# EC2 Backup Files
+*_ec2_backup.*
+bot_state_ec2_backup.json
+enhanced_config_ec2_backup.json
+trade_log_ec2_backup.csv
 
 # Python Cache
 __pycache__/
@@ -46,6 +51,10 @@ wheels/
 venv/
 env/
 ENV/
+# Additional environment folders
+.venv/
+bot_env/
+crypto_bot_env/
 
 # IDE Files
 .vscode/
