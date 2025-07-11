@@ -1,0 +1,56 @@
+🎯 CRYPTO TRADING BOT - AWS UPLOAD FILE LIST
+===========================================
+
+ESSENTIAL FILES TO UPLOAD:
+--------------------------
+
+1. MAIN APPLICATION:
+   ✅ bot.py
+   ✅ config.py
+   ✅ enhanced_config.json
+   ✅ requirements.txt
+
+2. CORE STRATEGIES:
+   ✅ strategies/ma_crossover.py
+   ✅ strategies/multi_strategy_optimized.py
+   ✅ strategies/hybrid_strategy.py
+
+3. SUPPORT MODULES:
+   ✅ enhanced_multi_strategy.py
+   ✅ institutional_strategies.py
+   ✅ log_utils.py
+   ✅ performance_tracker.py
+   ✅ enhanced_config.py
+   ✅ state_manager.py
+   ✅ success_rate_enhancer.py
+
+4. OPTIONAL STATE FILES (for history preservation):
+   📊 bot_state.json
+   📊 trade_log.csv
+   📊 performance_report.csv
+
+TOTAL CORE FILES: ~15 files
+ESTIMATED SIZE: < 1 MB
+
+FILES TO EXCLUDE:
+-----------------
+❌ All test_*.py files
+❌ All *.md documentation files
+❌ All backup files (enhanced_config.json.backup_*)
+❌ __pycache__/ directories
+❌ .git/ directory
+❌ bot_log.txt
+❌ Any analyze_*.py files
+
+DEPLOYMENT NOTES:
+-----------------
+1. Create virtual environment on AWS: python -m venv crypto_bot_env
+2. Activate environment: source crypto_bot_env/bin/activate
+3. Install dependencies: pip install -r requirements.txt
+4. Update config.py with your API keys (or use environment variables)
+5. Run bot: python bot.py
+
+SECURITY REMINDER:
+-----------------
+⚠️  Your API keys are in config.py - consider using environment variables for production
+⚠️  Never expose your API keys in logs or version control
