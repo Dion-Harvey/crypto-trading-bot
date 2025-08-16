@@ -1,0 +1,893 @@
+{
+  "strategy_performance": {
+    "RSI": {
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0
+    },
+    "Bollinger": {
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0
+    },
+    "MA-Contrarian": {
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0
+    },
+    "VWAP": {
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0
+    }
+  },
+  "market_condition_performance": {
+    "high_volatility": {
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0
+    },
+    "normal_volatility": {
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0
+    },
+    "strong_uptrend": {
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0
+    },
+    "strong_downtrend": {
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0
+    }
+  },
+  "time_of_day_performance": {},
+  "confidence_threshold_analysis": {
+    "0.2-0.4": {
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0
+    },
+    "0.4-0.6": {
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0
+    },
+    "0.6-0.8": {
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0
+    },
+    "0.8-1.0": {
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0
+    }
+  },
+  "trade_history": [
+    {
+      "timestamp": "2025-07-03T10:04:57.177303",
+      "signal": {
+        "action": "BUY",
+        "confidence": 0.646551724137931,
+        "reason": "BUY consensus from pattern_recognition, support_resistance | Market: insufficient_data (downtrend) | Flow: retail_dominated | Confidence: 0.65",
+        "strategy_signals": {
+          "multi_rsi_binance": {
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "Multi-RSI neutral: RSI6=49.3, RSI12=60.3, RSI24=55.2"
+          },
+          "stochastic_rsi": {
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "Stoch RSI: %K=13.2, %D=7.3"
+          },
+          "williams_r": {
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "Williams %R: -37.7"
+          },
+          "money_flow_index": {
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "MFI: 26.7"
+          },
+          "volume_flow": {
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "Volume Flow: neutral"
+          },
+          "pattern_recognition": {
+            "action": "BUY",
+            "confidence": 0.6,
+            "reason": "Pattern: ['falling_wedge']"
+          },
+          "support_resistance": {
+            "action": "BUY",
+            "confidence": 1.0,
+            "reason": "Near support: $109347.96 (strength: 1.00)"
+          },
+          "microstructure": {
+            "action": "HOLD",
+            "confidence": 0.2,
+            "reason": "Microstructure: good quality"
+          },
+          "multi_timeframe": {
+            "action": "SELL",
+            "confidence": 0.5,
+            "reason": "MTF consensus: 1/2 signals aligned"
+          }
+        },
+        "weighted_votes": {
+          "BUY": 0.646551724137931,
+          "SELL": 0.25862068965517243,
+          "HOLD": 0.09482758620689657
+        },
+        "market_analysis": {
+          "volatility": 0.02646032877706414,
+          "trend_direction": "downtrend",
+          "trend_strength": 0.5,
+          "market_phase": "insufficient_data",
+          "volume_patterns": {
+            "patterns": [
+              {
+                "detected": true,
+                "type": "volume_dryup",
+                "signal": "WATCH",
+                "confidence": 0.6,
+                "description": "Volume dry-up: 0.3x average volume"
+              }
+            ],
+            "signal": "HOLD",
+            "confidence": 0.36,
+            "pattern_count": 1,
+            "strongest_pattern": {
+              "detected": true,
+              "type": "volume_dryup",
+              "signal": "WATCH",
+              "confidence": 0.6,
+              "description": "Volume dry-up: 0.3x average volume"
+            }
+          },
+          "institutional_flow": {
+            "flow_type": "retail_dominated",
+            "confidence": 0.3,
+            "institutional_blocks": 0,
+            "stealth_patterns": {
+              "detected": false
+            },
+            "block_details": [],
+            "flow_intensity": 0
+          },
+          "market_structure": {
+            "structure_signal": "HOLD",
+            "confidence": 0.2,
+            "liquidity": {
+              "liquidity_score": 0.341877918965575,
+              "volume_consistency": 0,
+              "price_impact_score": 0.5,
+              "spread_tightness": 0.9871217738312745,
+              "liquidity_level": "low"
+            },
+            "regime": {
+              "volatility_regime": "normal",
+              "trend_regime": "sideways",
+              "volume_regime": "low",
+              "market_stress": {
+                "volatility_stress": 50,
+                "volume_stress": 0.1,
+                "gap_stress": 0.0,
+                "composite_stress": 0.28,
+                "stress_level": "low"
+              },
+              "regime_stability": 0.4595553131147912,
+              "regime_strength": 0.3
+            },
+            "volatility_structure": {
+              "term_structure": "mixed",
+              "short_term_vol": 0.0003332027289696114,
+              "medium_term_vol": 0.0006972908881035035,
+              "long_term_vol": NaN,
+              "volatility_clustering": 0,
+              "vol_of_vol": 3.1350723054803026e-05
+            },
+            "price_efficiency": {
+              "efficiency_score": 0.8649782603440492,
+              "serial_correlation": 0.06255434913987706,
+              "variance_ratio": 1,
+              "reversal_tendency": 0.55,
+              "market_efficiency": "high"
+            },
+            "flow_toxicity": {
+              "toxicity_level": "low",
+              "relative_toxicity": 1.0,
+              "flow_consistency": 0.4,
+              "adverse_selection_risk": 0.6
+            },
+            "market_quality": {
+              "overall_score": 0.6827424717238497,
+              "quality_level": "good",
+              "components": {
+                "liquidity": 0.341877918965575,
+                "efficiency": 0.8649782603440492,
+                "volatility_structure": 1.0
+              },
+              "trading_recommendation": "favorable"
+            }
+          },
+          "liquidity_conditions": {
+            "liquidity_score": 0.341877918965575,
+            "volume_consistency": 0,
+            "price_impact_score": 0.5,
+            "spread_tightness": 0.9871217738312745,
+            "liquidity_level": "low"
+          },
+          "market_stress": {
+            "volatility_stress": 50,
+            "volume_stress": 0.1,
+            "gap_stress": 0.0,
+            "composite_stress": 0.28,
+            "stress_level": "low"
+          },
+          "trading_conditions": {
+            "favorable": true,
+            "conditions": [
+              "low_volatility",
+              "moderate_trend",
+              "good_market_quality"
+            ],
+            "overall_assessment": "favorable"
+          }
+        },
+        "risk_assessment": {
+          "risk_level": "medium",
+          "risk_score": 0.30000000000000004,
+          "risk_factors": [
+            "low_liquidity",
+            "strategy_disagreement"
+          ],
+          "recommended_position_adjustment": {
+            "size_multiplier": 0.8,
+            "recommendation": "moderate_position_size",
+            "justification": "Medium risk (score: 0.30) - moderate exposure"
+          }
+        },
+        "signal_quality": {
+          "quality": "good",
+          "score": 0.63,
+          "consensus_ratio": 0.5,
+          "avg_confidence": 0.575,
+          "factors": [
+            "favorable_conditions"
+          ]
+        },
+        "execution_timing": {
+          "execution_quality": "acceptable",
+          "recommendation": "execute_with_caution",
+          "market_hours_factor": "medium_activity",
+          "optimal_execution_window": "wait_for_higher_liquidity"
+        },
+        "vote_count": {
+          "BUY": 1,
+          "SELL": 0,
+          "HOLD": 3
+        },
+        "fusion_info": {
+          "selection_reason": "Enhanced strategy for stable market conditions",
+          "adaptive_mode": "mean_reversion",
+          "all_signals": {
+            "Base Strategy": {
+              "action": "HOLD",
+              "confidence": 0
+            },
+            "Enhanced Strategy": {
+              "action": "BUY",
+              "confidence": 0.646551724137931
+            },
+            "Adaptive Strategy": {
+              "action": "HOLD",
+              "confidence": 0.0
+            },
+            "Institutional ML": {
+              "action": "HOLD",
+              "confidence": 0.3
+            }
+          },
+          "market_volatility": 0.0006972908881035035,
+          "institutional_regime": "stable"
+        },
+        "institutional_analysis": {
+          "market_regime": {
+            "regime": "stable",
+            "confidence": 0.5,
+            "features": {},
+            "recommendation": "Wait for more data"
+          },
+          "correlation_analysis": {
+            "correlations": {
+              "DXY": -0.5550673402538046,
+              "GOLD": 0.42541501311325236,
+              "SPY": 0.06418057252420029,
+              "VIX": -0.15066523880068883
+            },
+            "regime": "low_correlation",
+            "signals": [
+              {
+                "asset": "DXY",
+                "signal": "neutral",
+                "strength": 0.5550673402538046,
+                "reasoning": "Strong USD pressure on crypto"
+              }
+            ],
+            "risk_factors": {
+              "risk_score": 0,
+              "factors": [],
+              "recommendation": "Normal risk levels"
+            }
+          },
+          "ml_signal": {
+            "action": "HOLD",
+            "confidence": 0.3,
+            "reason": "ML model not trained"
+          },
+          "risk_analysis": {
+            "var_daily": 0.05307474550332592,
+            "var_weekly": 0.14042257749984405,
+            "var_monthly": 0.29070235346017487,
+            "confidence_level": 0.95,
+            "max_expected_loss": 0.05307474550332592,
+            "risk_assessment": "LOW"
+          },
+          "kelly_position_size": 7.5
+        },
+        "risk_score": "LOW"
+      },
+      "market_conditions": {},
+      "entry_price": 109495.7,
+      "exit_price": null,
+      "pnl": null,
+      "outcome": "pending"
+    },
+    {
+      "timestamp": "2025-07-03T11:20:56.123029",
+      "signal": {
+        "action": "BUY",
+        "confidence": 0.6207314963871162,
+        "reason": "BUY consensus from stochastic_rsi, support_resistance | Market: insufficient_data (downtrend) | Flow: retail_dominated | Confidence: 0.62",
+        "strategy_signals": {
+          "multi_rsi_binance": {
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "Multi-RSI neutral: RSI6=25.8, RSI12=31.2, RSI24=40.6"
+          },
+          "stochastic_rsi": {
+            "action": "BUY",
+            "confidence": 0.36838000292663664,
+            "reason": "Stoch RSI: %K=9.5, %D=5.9"
+          },
+          "williams_r": {
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "Williams %R: -77.7"
+          },
+          "money_flow_index": {
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "MFI: 61.2"
+          },
+          "volume_flow": {
+            "action": "BUY",
+            "confidence": 5.168263950045642e-07,
+            "reason": "Volume Flow: accumulation"
+          },
+          "pattern_recognition": {
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "No significant patterns detected"
+          },
+          "support_resistance": {
+            "action": "BUY",
+            "confidence": 1.0,
+            "reason": "Near support: $109430.70 (strength: 1.00)"
+          },
+          "microstructure": {
+            "action": "HOLD",
+            "confidence": 0.2,
+            "reason": "Microstructure: fair quality"
+          },
+          "multi_timeframe": {
+            "action": "SELL",
+            "confidence": 0.5,
+            "reason": "MTF consensus: 1/2 signals aligned"
+          }
+        },
+        "weighted_votes": {
+          "BUY": 0.6207314963871162,
+          "SELL": 0.2775135392289394,
+          "HOLD": 0.10175496438394446
+        },
+        "market_analysis": {
+          "volatility": 0.02064700783326574,
+          "trend_direction": "downtrend",
+          "trend_strength": 0.5,
+          "market_phase": "insufficient_data",
+          "volume_patterns": {
+            "patterns": [],
+            "signal": "HOLD",
+            "confidence": 0.0,
+            "pattern_count": 0,
+            "strongest_pattern": null
+          },
+          "institutional_flow": {
+            "flow_type": "retail_dominated",
+            "confidence": 0.3,
+            "institutional_blocks": 0,
+            "stealth_patterns": {
+              "detected": false
+            },
+            "block_details": [],
+            "flow_intensity": 0
+          },
+          "market_structure": {
+            "structure_signal": "HOLD",
+            "confidence": 0.2,
+            "liquidity": {
+              "liquidity_score": 0,
+              "volume_consistency": 0,
+              "price_impact_score": 0.5,
+              "spread_tightness": 0.9903873110060247,
+              "liquidity_level": "low"
+            },
+            "regime": {
+              "volatility_regime": "normal",
+              "trend_regime": "sideways",
+              "volume_regime": "high",
+              "market_stress": {
+                "volatility_stress": 50,
+                "volume_stress": 0.2,
+                "gap_stress": 0.0,
+                "composite_stress": 0.31,
+                "stress_level": "low"
+              },
+              "regime_stability": 0.315585563593655,
+              "regime_strength": 0.3
+            },
+            "volatility_structure": {
+              "term_structure": "mixed",
+              "short_term_vol": 0.0002923338175150089,
+              "medium_term_vol": 0.0005440964301704815,
+              "long_term_vol": NaN,
+              "volatility_clustering": 0.3105902331086268,
+              "vol_of_vol": 5.486141628245998e-05
+            },
+            "price_efficiency": {
+              "efficiency_score": 0.7347596889357189,
+              "serial_correlation": -0.3131007776607029,
+              "variance_ratio": 1,
+              "reversal_tendency": 0.7,
+              "market_efficiency": "high"
+            },
+            "flow_toxicity": {
+              "toxicity_level": "low",
+              "relative_toxicity": 1.0,
+              "flow_consistency": 0.5,
+              "adverse_selection_risk": 0.5
+            },
+            "market_quality": {
+              "overall_score": 0.49390387557428755,
+              "quality_level": "fair",
+              "components": {
+                "liquidity": 0,
+                "efficiency": 0.7347596889357189,
+                "volatility_structure": 1.0
+              },
+              "trading_recommendation": "caution"
+            }
+          },
+          "liquidity_conditions": {
+            "liquidity_score": 0,
+            "volume_consistency": 0,
+            "price_impact_score": 0.5,
+            "spread_tightness": 0.9903873110060247,
+            "liquidity_level": "low"
+          },
+          "market_stress": {
+            "volatility_stress": 50,
+            "volume_stress": 0.2,
+            "gap_stress": 0.0,
+            "composite_stress": 0.31,
+            "stress_level": "low"
+          },
+          "trading_conditions": {
+            "favorable": false,
+            "conditions": [
+              "low_volatility",
+              "moderate_trend"
+            ],
+            "overall_assessment": "challenging"
+          }
+        },
+        "risk_assessment": {
+          "risk_level": "medium",
+          "risk_score": 0.30000000000000004,
+          "risk_factors": [
+            "low_liquidity",
+            "strategy_disagreement"
+          ],
+          "recommended_position_adjustment": {
+            "size_multiplier": 0.8,
+            "recommendation": "moderate_position_size",
+            "justification": "Medium risk (score: 0.30) - moderate exposure"
+          }
+        },
+        "signal_quality": {
+          "quality": "fair",
+          "score": 0.4068380002926637,
+          "consensus_ratio": 0.5,
+          "avg_confidence": 0.5170950007316591,
+          "factors": []
+        },
+        "execution_timing": {
+          "execution_quality": "acceptable",
+          "recommendation": "execute_with_caution",
+          "market_hours_factor": "medium_activity",
+          "optimal_execution_window": "wait_for_higher_liquidity"
+        },
+        "vote_count": {
+          "BUY": 1,
+          "SELL": 0,
+          "HOLD": 3
+        },
+        "fusion_info": {
+          "selection_reason": "Enhanced strategy for stable market conditions",
+          "adaptive_mode": "mean_reversion",
+          "all_signals": {
+            "Base Strategy": {
+              "action": "HOLD",
+              "confidence": 0
+            },
+            "Enhanced Strategy": {
+              "action": "BUY",
+              "confidence": 0.6207314963871162
+            },
+            "Adaptive Strategy": {
+              "action": "HOLD",
+              "confidence": 0.0
+            },
+            "Institutional ML": {
+              "action": "HOLD",
+              "confidence": 0.3
+            }
+          },
+          "market_volatility": 0.0005440964301704815,
+          "institutional_regime": "stable"
+        },
+        "institutional_analysis": {
+          "market_regime": {
+            "regime": "stable",
+            "confidence": 0.5,
+            "features": {},
+            "recommendation": "Wait for more data"
+          },
+          "correlation_analysis": {
+            "correlations": {
+              "DXY": -0.4913082331199995,
+              "GOLD": 0.5212040786280343,
+              "SPY": -0.16607633025975846,
+              "VIX": -0.47293009252832163
+            },
+            "regime": "moderate_correlation",
+            "signals": [
+              {
+                "asset": "VIX",
+                "signal": "contrarian_bullish",
+                "strength": 0.47293009252832163,
+                "reasoning": "High fear potentially oversold condition"
+              }
+            ],
+            "risk_factors": {
+              "risk_score": 0,
+              "factors": [],
+              "recommendation": "Normal risk levels"
+            }
+          },
+          "ml_signal": {
+            "action": "HOLD",
+            "confidence": 0.3,
+            "reason": "ML model not trained"
+          },
+          "risk_analysis": {
+            "var_daily": 0.027393248546376352,
+            "var_weekly": 0.07247572325589344,
+            "var_monthly": 0.1500390015219593,
+            "confidence_level": 0.95,
+            "max_expected_loss": 0.027393248546376352,
+            "risk_assessment": "LOW"
+          },
+          "kelly_position_size": 7.5
+        },
+        "risk_score": "LOW"
+      },
+      "market_conditions": {},
+      "entry_price": 109475.89,
+      "exit_price": null,
+      "pnl": null,
+      "outcome": "pending"
+    },
+    {
+      "timestamp": "2025-07-03T18:26:24.277778",
+      "signal": {
+        "action": "BUY",
+        "confidence": 0.5022261144607806,
+        "reason": "BUY consensus from support_resistance, multi_timeframe | Market: insufficient_data (uptrend) | Flow: retail_dominated | Confidence: 0.50",
+        "strategy_signals": {
+          "multi_rsi_binance": {
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "Multi-RSI neutral: RSI6=68.0, RSI12=59.9, RSI24=61.6"
+          },
+          "stochastic_rsi": {
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "Stoch RSI: %K=50.2, %D=31.7"
+          },
+          "williams_r": {
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "Williams %R: -34.9"
+          },
+          "money_flow_index": {
+            "action": "SELL",
+            "confidence": 0.6060931969774174,
+            "reason": "MFI: 90.1"
+          },
+          "volume_flow": {
+            "action": "HOLD",
+            "confidence": 0.0,
+            "reason": "Volume Flow: neutral"
+          },
+          "pattern_recognition": {
+            "action": "SELL",
+            "confidence": 0.6,
+            "reason": "Pattern: ['rising_wedge']"
+          },
+          "support_resistance": {
+            "action": "BUY",
+            "confidence": 1.0,
+            "reason": "Near support: $109692.78 (strength: 1.00)"
+          },
+          "microstructure": {
+            "action": "HOLD",
+            "confidence": 0.2,
+            "reason": "Microstructure: fair quality"
+          },
+          "multi_timeframe": {
+            "action": "BUY",
+            "confidence": 0.5,
+            "reason": "MTF consensus: 1/2 signals aligned"
+          }
+        },
+        "weighted_votes": {
+          "BUY": 0.5022261144607806,
+          "SELL": 0.4241140554183049,
+          "HOLD": 0.0736598301209145
+        },
+        "market_analysis": {
+          "volatility": 0.015545974845169805,
+          "trend_direction": "uptrend",
+          "trend_strength": 0.5,
+          "market_phase": "insufficient_data",
+          "volume_patterns": {
+            "patterns": [
+              {
+                "detected": true,
+                "type": "buying_climax",
+                "signal": "SELL",
+                "confidence": 0.3650390625,
+                "description": "Buying climax detected with 6.7x volume"
+              }
+            ],
+            "signal": "SELL",
+            "confidence": 0.3650390625,
+            "pattern_count": 1,
+            "strongest_pattern": {
+              "detected": true,
+              "type": "buying_climax",
+              "signal": "SELL",
+              "confidence": 0.3650390625,
+              "description": "Buying climax detected with 6.7x volume"
+            }
+          },
+          "institutional_flow": {
+            "flow_type": "retail_dominated",
+            "confidence": 0.3,
+            "institutional_blocks": 0,
+            "stealth_patterns": {
+              "detected": false
+            },
+            "block_details": [],
+            "flow_intensity": 0
+          },
+          "market_structure": {
+            "structure_signal": "HOLD",
+            "confidence": 0.2,
+            "liquidity": {
+              "liquidity_score": 0.10343805047415056,
+              "volume_consistency": 0,
+              "price_impact_score": 0.5,
+              "spread_tightness": 0.9903530934818568,
+              "liquidity_level": "low"
+            },
+            "regime": {
+              "volatility_regime": "normal",
+              "trend_regime": "sideways",
+              "volume_regime": "normal",
+              "market_stress": {
+                "volatility_stress": 50,
+                "volume_stress": 0.1,
+                "gap_stress": 0.0,
+                "composite_stress": 0.28,
+                "stress_level": "low"
+              },
+              "regime_stability": 0.4231198154424449,
+              "regime_strength": 0.0
+            },
+            "volatility_structure": {
+              "term_structure": "mixed",
+              "short_term_vol": 0.0005986256178143104,
+              "medium_term_vol": 0.00040967240798683375,
+              "long_term_vol": NaN,
+              "volatility_clustering": 0.1435989531165903,
+              "vol_of_vol": 3.3506478597334514e-05
+            },
+            "price_efficiency": {
+              "efficiency_score": 0.8232038405519027,
+              "serial_correlation": -0.14199039862024343,
+              "variance_ratio": 1,
+              "reversal_tendency": 0.6,
+              "market_efficiency": "high"
+            },
+            "flow_toxicity": {
+              "toxicity_level": "low",
+              "relative_toxicity": 1.0,
+              "flow_consistency": 0.7,
+              "adverse_selection_risk": 0.30000000000000004
+            },
+            "market_quality": {
+              "overall_score": 0.5706567564104212,
+              "quality_level": "fair",
+              "components": {
+                "liquidity": 0.10343805047415056,
+                "efficiency": 0.8232038405519027,
+                "volatility_structure": 1.0
+              },
+              "trading_recommendation": "caution"
+            }
+          },
+          "liquidity_conditions": {
+            "liquidity_score": 0.10343805047415056,
+            "volume_consistency": 0,
+            "price_impact_score": 0.5,
+            "spread_tightness": 0.9903530934818568,
+            "liquidity_level": "low"
+          },
+          "market_stress": {
+            "volatility_stress": 50,
+            "volume_stress": 0.1,
+            "gap_stress": 0.0,
+            "composite_stress": 0.28,
+            "stress_level": "low"
+          },
+          "trading_conditions": {
+            "favorable": false,
+            "conditions": [
+              "low_volatility",
+              "moderate_trend"
+            ],
+            "overall_assessment": "challenging"
+          }
+        },
+        "risk_assessment": {
+          "risk_level": "medium",
+          "risk_score": 0.30000000000000004,
+          "risk_factors": [
+            "low_liquidity",
+            "strategy_disagreement"
+          ],
+          "recommended_position_adjustment": {
+            "size_multiplier": 0.8,
+            "recommendation": "moderate_position_size",
+            "justification": "Medium risk (score: 0.30) - moderate exposure"
+          }
+        },
+        "signal_quality": {
+          "quality": "poor",
+          "score": 0.39248745575819344,
+          "consensus_ratio": 0.4,
+          "avg_confidence": 0.5812186393954836,
+          "factors": []
+        },
+        "execution_timing": {
+          "execution_quality": "acceptable",
+          "recommendation": "execute_with_caution",
+          "market_hours_factor": "high_activity",
+          "optimal_execution_window": "wait_for_higher_liquidity"
+        },
+        "vote_count": {
+          "BUY": 1,
+          "SELL": 0,
+          "HOLD": 3
+        },
+        "fusion_info": {
+          "selection_reason": "Enhanced strategy for stable market conditions",
+          "adaptive_mode": "mean_reversion",
+          "all_signals": {
+            "Base Strategy": {
+              "action": "HOLD",
+              "confidence": 0
+            },
+            "Enhanced Strategy": {
+              "action": "BUY",
+              "confidence": 0.5022261144607806
+            },
+            "Adaptive Strategy": {
+              "action": "HOLD",
+              "confidence": 0.0
+            },
+            "Institutional ML": {
+              "action": "HOLD",
+              "confidence": 0.3
+            }
+          },
+          "market_volatility": 0.00040967240798683375,
+          "institutional_regime": "stable"
+        },
+        "institutional_analysis": {
+          "market_regime": {
+            "regime": "stable",
+            "confidence": 0.5,
+            "features": {},
+            "recommendation": "Wait for more data"
+          },
+          "correlation_analysis": {
+            "correlations": {
+              "DXY": -0.41549559890129417,
+              "GOLD": 0.2995313116288502,
+              "SPY": -0.0550821650979233,
+              "VIX": -0.3792564448165613
+            },
+            "regime": "low_correlation",
+            "signals": [],
+            "risk_factors": {
+              "risk_score": 0,
+              "factors": [],
+              "recommendation": "Normal risk levels"
+            }
+          },
+          "ml_signal": {
+            "action": "HOLD",
+            "confidence": 0.3,
+            "reason": "ML model not trained"
+          },
+          "risk_analysis": {
+            "var_daily": 0.029017356699413816,
+            "var_weekly": 0.07677270953110299,
+            "var_monthly": 0.158934608234426,
+            "confidence_level": 0.95,
+            "max_expected_loss": 0.029017356699413816,
+            "risk_assessment": "LOW"
+          },
+          "kelly_position_size": 7.5
+        },
+        "risk_score": "LOW"
+      },
+      "market_conditions": {},
+      "entry_price": 109770.03,
+      "exit_price": null,
+      "pnl": null,
+      "outcome": "pending"
+    }
+  ]
+}
