@@ -1,0 +1,233 @@
+{
+  "trading": {
+    "symbol": "BTC/USDT",
+    "base_amount_usd": 25,
+    "min_amount_usd": 20,
+    "max_amount_usd": 40,
+    "use_intelligent_orders": true,
+    "limit_order_timeout_seconds": 60,
+    "trade_cooldown_seconds": 30,
+    "base_currency": "USDT",
+    "supported_pairs": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "SOL/USDT",
+      "XRP/USDT",
+      "ADA/USDT",
+      "DOGE/USDT",
+      "XLM/USDT",
+      "SUI/USDT",
+      "SHIB/USDT",
+      "HBAR/USDT"
+    ],
+    "position_sizing_mode": "percentage",
+    "base_position_pct": 0.45,
+    "min_position_pct": 0.3,
+    "max_position_pct": 0.65,
+    "volume_confirmation_required": false,
+    "trend_confirmation_required": false,
+    "multiple_timeframe_analysis": true,
+    "fee_optimization": {
+      "prefer_maker_orders": true,
+      "post_only_mode": false,
+      "min_efficient_order_usd": 50,
+      "max_acceptable_fee_ratio": 0.2,
+      "use_bnb_for_fees": true,
+      "track_daily_fees": true,
+      "fee_efficiency_alerts": true
+    }
+  },
+  "risk_management": {
+    "stop_loss_pct": 0.03,
+    "take_profit_pct": 0.025,
+    "emergency_exit_pct": 0.05,
+    "max_drawdown_pct": 0.12,
+    "daily_loss_limit_usd": 5.0,
+    "max_consecutive_losses": 2,
+    "consecutive_loss_cooldown_minutes": 60,
+    "daily_loss_pause_hours": 2,
+    "immediate_stop_limit_enabled": true,
+    "immediate_stop_limit_pct": 0.00125,
+    "trailing_stop_limit_enabled": true,
+    "trailing_stop_limit_trigger_pct": 0.001,
+    "trailing_stop_limit_step_pct": 0.0005,
+    "trailing_stop_limit_min_profit": 0.002,
+    "trailing_oco_enabled": true,
+    "trailing_oco_stop_pct": 0.008,
+    "trailing_oco_profit_pct": 0.015,
+    "trailing_oco_min_lock": 0.003,
+    "oco_trail_trigger": 0.005,
+    "oco_trail_distance": 0.008,
+    "oco_min_profit_lock": 0.003,
+    "partial_oco_enabled": true,
+    "partial_oco_aggressive_pct": 0.5,
+    "partial_oco_conservative_pct": 0.3,
+    "partial_oco_runner_pct": 0.2,
+    "daily_loss_limit_pct": 0.05,
+    "trailing_stop_enabled": true,
+    "trailing_stop_pct": 0.015,
+    "minimum_hold_time_minutes": 5,
+    "profit_lock_threshold": 0.015,
+    "partial_exit_enabled": true,
+    "partial_exit_at_profit_pct": 0.015,
+    "partial_exit_amount_pct": 0.5,
+    "dynamic_exit_enabled": true,
+    "trend_reversal_exit": true
+  },
+  "strategy_parameters": {
+    "confidence_threshold": 0.45,
+    "high_volatility_confidence_multiplier": 1.4,
+    "extreme_condition_confidence_multiplier": 0.7,
+    "min_consensus_votes": 3,
+    "strong_consensus_votes": 4,
+    "rsi_period": 14,
+    "rsi_oversold": 30,
+    "rsi_overbought": 70,
+    "rsi_momentum_threshold": 5,
+    "bb_period": 20,
+    "bb_std_dev": 2.2,
+    "bb_touch_tolerance_pct": 0.008,
+    "mr_fast_ma": 9,
+    "mr_slow_ma": 21,
+    "mr_signal_line": 9,
+    "mr_deviation_threshold": 0.015,
+    "vwap_period": 24,
+    "vwap_deviation_threshold": 0.008,
+    "vwap_volume_surge_threshold": 2.2,
+    "dip_detection_enabled": true,
+    "dip_confidence_reduction": 0.15,
+    "peak_avoidance_enabled": true
+  },
+  "market_filters": {
+    "high_volatility_threshold": 0.02,
+    "very_high_volatility_threshold": 0.035,
+    "consolidation_volatility_threshold": 0.006,
+    "strong_trend_threshold": 0.025,
+    "volume_confirmation_threshold": 1.5,
+    "trend_detection_periods": [
+      7,
+      25,
+      99
+    ],
+    "trend_thresholds": [
+      0.012,
+      0.02,
+      0.035,
+      0.05
+    ],
+    "support_resistance_enabled": true,
+    "fibonacci_levels_enabled": true,
+    "bollinger_squeeze_detection": true,
+    "macd_divergence_detection": true,
+    "ma_trend_filter_enabled": true,
+    "require_ma_alignment": false,
+    "rsi_range_filter": {
+      "enabled": false,
+      "avoid_range_min": 40,
+      "avoid_range_max": 60,
+      "description": "Disabled for more active day trading"
+    },
+    "minimum_trend_strength": 0.015,
+    "multi_timeframe_required": false
+  },
+  "position_sizing": {
+    "volatility_factors": {
+      "very_high": 0.6,
+      "high": 0.75,
+      "medium": 0.9,
+      "low": 1.1
+    },
+    "confidence_scaling": {
+      "enabled": true,
+      "min_factor": 0.7,
+      "max_factor": 1.5,
+      "scaling_multiplier": 1.5,
+      "high_confidence_threshold": 0.55,
+      "exceptional_confidence_threshold": 0.65
+    },
+    "loss_adjustment": {
+      "enabled": true,
+      "min_factor": 0.4,
+      "reduction_per_loss": 0.25
+    },
+    "drawdown_adjustment": {
+      "enabled": true,
+      "threshold": 0.08,
+      "min_factor": 0.3,
+      "scaling_factor": 4
+    },
+    "time_adjustment": {
+      "enabled": true,
+      "low_liquidity_hours": [
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "low_liquidity_factor": 0.7
+    },
+    "risk_based_sizing": {
+      "enabled": true,
+      "risk_per_trade_pct": 0.02,
+      "max_risk_per_trade_pct": 0.04,
+      "compounding_enabled": true
+    }
+  },
+  "adaptive_optimization": {
+    "enabled": true,
+    "review_period_days": 3,
+    "min_trades_for_adjustment": 10,
+    "adjustment_sensitivity": 0.1,
+    "auto_adjust_confidence": true,
+    "auto_adjust_risk": true,
+    "auto_adjust_position_size": true
+  },
+  "logging": {
+    "log_level": "INFO",
+    "log_individual_strategies": true,
+    "log_market_conditions": true,
+    "log_position_sizing": true,
+    "log_risk_management": true,
+    "performance_tracking": true
+  },
+  "system": {
+    "loop_interval_seconds": 15,
+    "connection_retry_attempts": 3,
+    "connection_retry_delay": 5,
+    "state_save_frequency": "after_each_trade",
+    "backup_config_on_change": true,
+    "price_jump_detection": {
+      "enabled": true,
+      "multi_timeframe": {
+        "spike": {
+          "window_seconds": 60,
+          "threshold_pct": 0.5
+        },
+        "short_trend": {
+          "window_seconds": 300,
+          "threshold_pct": 0.8
+        },
+        "medium_trend": {
+          "window_seconds": 900,
+          "threshold_pct": 1.2
+        },
+        "long_trend": {
+          "window_seconds": 1800,
+          "threshold_pct": 1.8
+        }
+      },
+      "override_cooldown": true,
+      "trend_tracking": true,
+      "momentum_analysis": true
+    }
+  },
+  "api_keys": {
+    "binance": {
+      "api_key": "bN4mjzb1pIfmRZCit0zjqxACIv1JszpbPDi3Zlhbh1961qsFgvwio6UWzIyUwQND",
+      "api_secret": "sWiP8bJdgW0VoxSyZ74EDls6PnSwciLYNuYgkgrVjmngsSGZW2JXfda1lFOzsthG",
+      "sandbox": false
+    }
+  },
+  "_comment": "\u00f0\u0178\u017d\u00af DAY TRADER OPTIMIZED CONFIGURATION - More aggressive thresholds for active trading"
+}

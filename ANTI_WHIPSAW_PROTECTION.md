@@ -103,3 +103,55 @@ The bot will now be **much more selective** and should eliminate the buy-high-se
 ---
 
 **Monitor the next 3-5 trades to confirm the improvements are working as expected.**
+
+---
+
+## 🛡️ ENHANCED SPIKE PROTECTION SYSTEM - AUGUST 2025 UPDATE
+
+### Overview
+Advanced protection system upgraded to prevent buying already-spiked pairs with intelligent momentum analysis and early-stage breakout detection.
+
+### 🚨 New Critical Filters (Will Block Trades)
+
+1. **Extreme 1h Spike Filter**
+   - Blocks pairs that have moved ≥8% in the past hour
+   - Reason: "Already spiked +X% in 1h - avoiding buy-the-top risk"
+
+2. **Double Spike Pattern Filter**  
+   - Blocks pairs with ≥6% (1h) AND ≥10% (4h) moves
+   - Reason: "Extended move - momentum exhausted"
+
+3. **Emergency Detection Protection**
+   - Blocks emergency switches if 1h move ≥7%
+   - Reason: "Already moved +X% in 1h - avoiding whipsaw"
+
+### 🎯 Smart Entry Timing Enhancement
+
+**24h Spike Protection:**
+- 5%+ daily moves allowed ONLY if 1h move ≤4%
+- ✅ Good: +6% (24h), +2% (1h) → "Smart spike entry - good timing!"
+- ❌ Bad: +6% (24h), +5% (1h) → "Late to party - momentum exhausted"
+
+### 🚀 Early-Stage Opportunity Detection
+
+**Ideal Patterns Get Priority (Threshold Reductions):**
+
+1. **Fresh Breakout Pattern** (+15% easier qualification)
+   - 1-3% (1h) with 4%+ (4h) momentum
+
+2. **Volume Surge Before Price** (+20% easier qualification)
+   - 150%+ volume with ≤2.5% (1h) price move
+
+3. **Building Momentum** (+10% easier qualification)
+   - Progressive acceleration across timeframes
+
+4. **Accelerating Momentum** (+10% easier qualification)
+   - Recent rates faster than historical rates
+
+### Momentum Quality Analysis
+- **Accelerating**: Recent periods faster than older periods
+- **Decelerating**: Recent periods slower than older periods
+- **Steady**: Consistent movement across timeframes
+
+### Status: ✅ ACTIVE
+This enhanced protection system is now live alongside the original July 2025 whipsaw protection, providing comprehensive entry timing intelligence that prefers early-stage breakouts over extended moves.

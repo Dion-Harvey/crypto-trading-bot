@@ -1,0 +1,48 @@
+#!/bin/bash
+#
+# 🤖 Crypto Trading Bot Systemd Service for 24/7 AWS EC2 Operation
+# This service ensures the bot runs continuously and restarts automatically
+#
+
+[Unit]
+Description=Crypto Trading Bot - 24/7 Automated Trading
+After=network.target
+Wants=network-online.target
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/crypto-trading-bot/crypto-trading-bot
+Environment=PATH=/home/ubuntu/crypto-trading-bot/crypto-trading-bot/.venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/ubuntu/crypto-trading-bot/crypto-trading-bot/.venv/bin/python /home/ubuntu/crypto-trading-bot/crypto-trading-bot/run_bot_daemon.py
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=always
+RestartSec=30
+StandardOutput=append:/home/ubuntu/crypto-trading-bot/crypto-trading-bot/daemon.log
+StandardError=append:/home/ubuntu/crypto-trading-bot/crypto-trading-bot/daemon.log
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=60
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=1G
+CPUQuota=80%
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/crypto-trading-bot/crypto-trading-bot
+
+# Environment variables for the bot
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/home/ubuntu/crypto-trading-bot/crypto-trading-bot
+Environment=TZ=UTC
+
+[Install]
+WantedBy=multi-user.target

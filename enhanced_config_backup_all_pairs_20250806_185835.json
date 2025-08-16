@@ -1,0 +1,399 @@
+{
+  "trading": {
+    "symbol": "XLM/USDT",
+    "base_amount_usd": 25,
+    "min_amount_usd": 20,
+    "max_amount_usd": 40,
+    "use_intelligent_orders": true,
+    "limit_order_timeout_seconds": 60,
+    "trade_cooldown_seconds": 30,
+    "base_currency": "USDT",
+    "supported_pairs": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "BNB/USDT",
+      "XRP/USDT",
+      "ADA/USDT",
+      "SOL/USDT",
+      "DOGE/USDT",
+      "DOT/USDT",
+      "MATIC/USDT",
+      "SHIB/USDT",
+      "AVAX/USDT",
+      "LINK/USDT",
+      "LTC/USDT",
+      "UNI/USDT",
+      "ATOM/USDT",
+      "XLM/USDT",
+      "ALGO/USDT",
+      "VET/USDT",
+      "FIL/USDT",
+      "THETA/USDT",
+      "AAVE/USDT",
+      "MKR/USDT",
+      "COMP/USDT",
+      "SNX/USDT",
+      "CRV/USDT",
+      "MANA/USDT",
+      "SAND/USDT",
+      "CHZ/USDT",
+      "ENJ/USDT",
+      "BAT/USDT",
+      "HBAR/USDT",
+      "SUI/USDT",
+      "APT/USDT",
+      "OP/USDT",
+      "ARB/USDT",
+      "BLUR/USDT",
+      "PEPE/USDT",
+      "FLOKI/USDT",
+      "BONK/USDT",
+      "WIF/USDT",
+      "EOS/USDT",
+      "TRX/USDT",
+      "ZRX/USDT",
+      "OMG/USDT",
+      "LRC/USDT",
+      "GRT/USDT",
+      "DYDX/USDT",
+      "GMX/USDT",
+      "JUP/USDT",
+      "WLD/USDT",
+      "AXS/USDT",
+      "NEAR/USDT",
+      "ICP/USDT",
+      "FTM/USDT",
+      "ONE/USDT"
+    ],
+    "position_sizing_mode": "percentage",
+    "base_position_pct": 0.45,
+    "min_position_pct": 0.3,
+    "max_position_pct": 0.65,
+    "volume_confirmation_required": false,
+    "trend_confirmation_required": false,
+    "multiple_timeframe_analysis": true,
+    "fee_optimization": {
+      "prefer_maker_orders": true,
+      "post_only_mode": false,
+      "min_efficient_order_usd": 50,
+      "max_acceptable_fee_ratio": 0.2,
+      "use_bnb_for_fees": true,
+      "track_daily_fees": true,
+      "fee_efficiency_alerts": true
+    },
+    "last_pair_switch": "2025-07-27T09:31:22.295445",
+    "switch_reason": "Opportunity: +6.50%"
+  },
+  "risk_management": {
+    "stop_loss_pct": 0.03,
+    "take_profit_pct": 0.025,
+    "emergency_exit_pct": 0.05,
+    "max_drawdown_pct": 0.12,
+    "daily_loss_limit_usd": 5.0,
+    "max_consecutive_losses": 2,
+    "consecutive_loss_cooldown_minutes": 60,
+    "daily_loss_pause_hours": 2,
+    "immediate_stop_limit_enabled": true,
+    "immediate_stop_limit_pct": 0.00125,
+    "trailing_stop_limit_enabled": true,
+    "trailing_stop_limit_trigger_pct": 0.001,
+    "trailing_stop_limit_step_pct": 0.0005,
+    "trailing_stop_limit_min_profit": 0.002,
+    "trailing_oco_enabled": true,
+    "trailing_oco_stop_pct": 0.008,
+    "trailing_oco_profit_pct": 0.015,
+    "trailing_oco_min_lock": 0.003,
+    "oco_trail_trigger": 0.005,
+    "oco_trail_distance": 0.008,
+    "oco_min_profit_lock": 0.003,
+    "partial_oco_enabled": true,
+    "partial_oco_aggressive_pct": 0.5,
+    "partial_oco_conservative_pct": 0.3,
+    "partial_oco_runner_pct": 0.2,
+    "daily_loss_limit_pct": 0.05,
+    "trailing_stop_enabled": true,
+    "trailing_stop_pct": 0.0025,
+    "binance_native_trailing": {
+      "enabled": true,
+      "trailing_percent": 0.25,
+      "activation_percent": 0.5,
+      "min_notional": 5.0,
+      "replace_manual_trailing": true,
+      "use_for_all_positions": true,
+      "emergency_fallback": true
+    },
+    "minimum_hold_time_minutes": 5,
+    "profit_lock_threshold": 0.015,
+    "partial_exit_enabled": true,
+    "partial_exit_at_profit_pct": 0.015,
+    "partial_exit_amount_pct": 0.5,
+    "dynamic_exit_enabled": true,
+    "trend_reversal_exit": true,
+    "max_concurrent_positions": 3,
+    "per_pair_max_allocation": 0.15,
+    "currency_diversification": true,
+    "auto_rebalancing": true,
+    "position_correlation_limit": 0.7,
+    "sector_diversification": true,
+    "max_meme_token_allocation": 0.1,
+    "tier1_preference_weight": 2.0,
+    "dynamic_position_sizing": true
+  },
+  "strategy_parameters": {
+    "confidence_threshold": 0.45,
+    "high_volatility_confidence_multiplier": 1.4,
+    "extreme_condition_confidence_multiplier": 0.7,
+    "min_consensus_votes": 3,
+    "strong_consensus_votes": 4,
+    "rsi_period": 14,
+    "rsi_oversold": 30,
+    "rsi_overbought": 70,
+    "rsi_momentum_threshold": 5,
+    "bb_period": 20,
+    "bb_std_dev": 2.2,
+    "bb_touch_tolerance_pct": 0.008,
+    "mr_fast_ma": 9,
+    "mr_slow_ma": 21,
+    "mr_signal_line": 9,
+    "mr_deviation_threshold": 0.015,
+    "vwap_period": 24,
+    "vwap_deviation_threshold": 0.008,
+    "vwap_volume_surge_threshold": 2.2,
+    "dip_detection_enabled": true,
+    "dip_confidence_reduction": 0.15,
+    "peak_avoidance_enabled": true,
+    "pair_rotation_enabled": true,
+    "opportunity_scanning_interval": 30,
+    "cross_pair_analysis": true,
+    "momentum_detection_enabled": true,
+    "sector_momentum_tracking": true,
+    "relative_strength_analysis": true
+  },
+  "market_filters": {
+    "high_volatility_threshold": 0.02,
+    "very_high_volatility_threshold": 0.035,
+    "consolidation_volatility_threshold": 0.006,
+    "strong_trend_threshold": 0.025,
+    "volume_confirmation_threshold": 1.5,
+    "trend_detection_periods": [
+      7,
+      25,
+      99
+    ],
+    "trend_thresholds": [
+      0.012,
+      0.02,
+      0.035,
+      0.05
+    ],
+    "support_resistance_enabled": true,
+    "fibonacci_levels_enabled": true,
+    "bollinger_squeeze_detection": true,
+    "macd_divergence_detection": true,
+    "ma_trend_filter_enabled": true,
+    "require_ma_alignment": false,
+    "rsi_range_filter": {
+      "enabled": false,
+      "avoid_range_min": 40,
+      "avoid_range_max": 60,
+      "description": "Disabled for more active day trading"
+    },
+    "minimum_trend_strength": 0.015,
+    "multi_timeframe_required": false
+  },
+  "position_sizing": {
+    "volatility_factors": {
+      "very_high": 0.6,
+      "high": 0.75,
+      "medium": 0.9,
+      "low": 1.1
+    },
+    "confidence_scaling": {
+      "enabled": true,
+      "min_factor": 0.7,
+      "max_factor": 1.5,
+      "scaling_multiplier": 1.5,
+      "high_confidence_threshold": 0.55,
+      "exceptional_confidence_threshold": 0.65
+    },
+    "loss_adjustment": {
+      "enabled": true,
+      "min_factor": 0.4,
+      "reduction_per_loss": 0.25
+    },
+    "drawdown_adjustment": {
+      "enabled": true,
+      "threshold": 0.08,
+      "min_factor": 0.3,
+      "scaling_factor": 4
+    },
+    "time_adjustment": {
+      "enabled": true,
+      "low_liquidity_hours": [
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "low_liquidity_factor": 0.7
+    },
+    "risk_based_sizing": {
+      "enabled": true,
+      "risk_per_trade_pct": 0.02,
+      "max_risk_per_trade_pct": 0.04,
+      "compounding_enabled": true
+    }
+  },
+  "adaptive_optimization": {
+    "enabled": true,
+    "review_period_days": 3,
+    "min_trades_for_adjustment": 10,
+    "adjustment_sensitivity": 0.1,
+    "auto_adjust_confidence": true,
+    "auto_adjust_risk": true,
+    "auto_adjust_position_size": true
+  },
+  "logging": {
+    "log_level": "INFO",
+    "log_individual_strategies": true,
+    "log_market_conditions": true,
+    "log_position_sizing": true,
+    "log_risk_management": true,
+    "performance_tracking": true
+  },
+  "system": {
+    "loop_interval_seconds": 15,
+    "connection_retry_attempts": 3,
+    "connection_retry_delay": 5,
+    "state_save_frequency": "after_each_trade",
+    "backup_config_on_change": true,
+    "price_jump_detection": {
+      "enabled": true,
+      "multi_timeframe": {
+        "spike": {
+          "window_seconds": 60,
+          "threshold_pct": 0.5
+        },
+        "short_trend": {
+          "window_seconds": 300,
+          "threshold_pct": 0.8
+        },
+        "medium_trend": {
+          "window_seconds": 900,
+          "threshold_pct": 1.2
+        },
+        "long_trend": {
+          "window_seconds": 1800,
+          "threshold_pct": 1.8
+        }
+      },
+      "override_cooldown": true,
+      "trend_tracking": true,
+      "momentum_analysis": true
+    }
+  },
+  "api_keys": {
+    "binance": {
+      "api_key": "bN4mjzb1pIfmRZCit0zjqxACIv1JszpbPDi3Zlhbh1961qsFgvwio6UWzIyUwQND",
+      "api_secret": "sWiP8bJdgW0VoxSyZ74EDls6PnSwciLYNuYgkgrVjmngsSGZW2JXfda1lFOzsthG",
+      "sandbox": false
+    }
+  },
+  "_comment": "\u00f0\u0178\u017d\u00af DAY TRADER OPTIMIZED CONFIGURATION - More aggressive thresholds for active trading",
+  "enhanced_features": {
+    "enabled": true,
+    "version": "2.0",
+    "last_updated": "2025-07-26T22:15:37.098533",
+    "features": {
+      "phase2_intelligence": true,
+      "native_trailing": true,
+      "integration_functions": true
+    },
+    "fallback_mode": true,
+    "error_handling": "graceful_degradation"
+  },
+  "phase2_intelligence": {
+    "enabled": true,
+    "provider": "free_apis",
+    "apis": {
+      "bitquery": {
+        "enabled": true,
+        "weight": 0.3
+      },
+      "defillama": {
+        "enabled": true,
+        "weight": 0.25
+      },
+      "thegraph": {
+        "enabled": true,
+        "weight": 0.2
+      },
+      "dune": {
+        "enabled": true,
+        "weight": 0.25
+      }
+    },
+    "refresh_interval": 300,
+    "confidence_threshold": 0.6,
+    "alert_thresholds": {
+      "whale_transaction_usd": 1000000,
+      "exchange_net_flow_usd": 5000000,
+      "stablecoin_change_pct": 2.0
+    }
+  },
+  "test": {
+    "timestamp": "2025-07-26T22:15:39.055797"
+  },
+  "last_updated": "2025-07-26T22:15:39.057770",
+  "config_version": "1.0",
+  "emergency_switch": {
+    "activated": true,
+    "target_symbol": "XLM/USDT",
+    "previous_symbol": "SUI/USDT",
+    "reason": "XLM +11.70% emergency opportunity",
+    "switched_at": "2025-08-04T18:36:23.636876",
+    "urgency": "CRITICAL"
+  },
+  "multi_currency": {
+    "enabled": true,
+    "prefer_usd": false,
+    "usd_fallback_enabled": true,
+    "usd_equivalents": {
+      "BTC/USDT": "BTC/USD",
+      "ETH/USDT": "ETH/USD",
+      "XRP/USDT": "XRP/USD",
+      "ADA/USDT": "ADA/USD",
+      "SOL/USDT": "SOL/USD",
+      "DOGE/USDT": "DOGE/USD",
+      "DOT/USDT": "DOT/USD",
+      "MATIC/USDT": "MATIC/USD",
+      "AVAX/USDT": "AVAX/USD",
+      "LINK/USDT": "LINK/USD",
+      "LTC/USDT": "LTC/USD",
+      "UNI/USDT": "UNI/USD",
+      "ATOM/USDT": "ATOM/USD",
+      "XLM/USDT": "XLM/USD"
+    },
+    "max_pairs": 80,
+    "auto_discovery": false,
+    "static_configuration": true,
+    "last_updated": "2025-08-06 18:21:09",
+    "selected_pairs_count": 55,
+    "currency_switching_enabled": true,
+    "intelligent_pair_selection": true,
+    "tier_based_selection": true,
+    "volume_threshold_usd": 500000,
+    "market_cap_consideration": true
+  },
+  "currency_switching": {
+    "enabled": true,
+    "prefer_higher_volume": true,
+    "prefer_tighter_spreads": true,
+    "usd_premium_threshold": 0.001,
+    "usdt_default_preference": true,
+    "dynamic_switching": true,
+    "liquidity_threshold": 100000,
+    "spread_threshold": 0.002
+  }
+}

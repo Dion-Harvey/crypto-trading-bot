@@ -1,0 +1,39 @@
+# =============================================================================
+# PHASE 2 DEPLOYMENT COMMANDS FOR YOUR AWS INSTANCE
+# =============================================================================
+# Instance: ubuntu@3.135.216.32
+# User: ubuntu
+# =============================================================================
+
+# 1. UPLOAD PHASE 2 FILES (Update your-key.pem path first!)
+scp -i "your-key.pem" free_phase2_api.py free_phase2_config.py unified_free_config.py ubuntu@3.135.216.32:/home/ubuntu/crypto-trading-bot/
+
+# 2. UPLOAD UPDATED CORE FILES  
+scp -i "your-key.pem" bot.py free_crypto_api.py onchain_config.py ubuntu@3.135.216.32:/home/ubuntu/crypto-trading-bot/
+
+# 3. UPLOAD VERIFICATION SCRIPT
+scp -i "your-key.pem" aws_verify_phase2.py ubuntu@3.135.216.32:/home/ubuntu/crypto-trading-bot/
+
+# 4. SSH INTO INSTANCE AND SETUP
+ssh -i "your-key.pem" ubuntu@3.135.216.32
+
+# Then run these commands on the AWS instance:
+cd /home/ubuntu/crypto-trading-bot
+
+# Stop any running bots (you had 3 instances running)
+pkill -f "python3 bot.py"
+
+# Install dependencies
+pip3 install -r requirements.txt
+
+# Verify Phase 2 installation
+python3 aws_verify_phase2.py
+
+# Test Phase 2 quickly
+python3 -c "from free_phase2_config import validate_phase2_setup; result = validate_phase2_setup(); print(f'Phase 2 Status: {result[\"status\"]}'); print(f'Monthly Cost: ${result[\"summary\"][\"monthly_cost\"]}'); print(f'Monthly Savings: ${result[\"summary\"][\"monthly_savings\"]}'); print(f'Active APIs: {result[\"summary\"][\"active_apis\"]}')"
+
+# Start enhanced bot
+nohup python3 bot.py > bot_phase2.log 2>&1 &
+
+# Monitor logs
+tail -f bot_phase2.log

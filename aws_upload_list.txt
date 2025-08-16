@@ -1,56 +1,105 @@
-🎯 CRYPTO TRADING BOT - AWS UPLOAD FILE LIST
-===========================================
+🎯 CRYPTO TRADING BOT - AWS UPLOAD FILE LIST (LIVE DATA READY)
+================================================================
+Updated: July 17, 2025
 
-ESSENTIAL FILES TO UPLOAD:
---------------------------
+ESSENTIAL FILES FOR LIVE DATA ACCESS:
+------------------------------------
 
 1. MAIN APPLICATION:
-   ✅ bot.py
-   ✅ config.py
-   ✅ enhanced_config.json
-   ✅ requirements.txt
+   ✅ bot.py                           # Main trading application with 3-layer system
+   ✅ config.py                        # API keys and basic configuration
+   ✅ enhanced_config.json              # Advanced trading parameters (updated)
+   ✅ requirements.txt                  # Python dependencies (enhanced)
 
-2. CORE STRATEGIES:
-   ✅ strategies/ma_crossover.py
-   ✅ strategies/multi_strategy_optimized.py
-   ✅ strategies/hybrid_strategy.py
+2. LIVE DATA ACCESS MODULES:
+   ✅ price_jump_detector.py            # Real-time price movement detection
+   ✅ multi_timeframe_ma.py             # Multi-timeframe MA analysis
+   ✅ enhanced_multi_timeframe_ma.py    # Enhanced timeframe analysis
+   ✅ priority_functions_5m1m.py       # Priority signal management
 
-3. SUPPORT MODULES:
-   ✅ enhanced_multi_strategy.py
-   ✅ institutional_strategies.py
-   ✅ log_utils.py
-   ✅ performance_tracker.py
-   ✅ enhanced_config.py
-   ✅ state_manager.py
-   ✅ success_rate_enhancer.py
+3. CORE STRATEGIES:
+   ✅ strategies/ma_crossover.py        # MA7/MA25 crossover (absolute priority)
+   ✅ strategies/multi_strategy_optimized.py  # Multi-strategy optimization
+   ✅ strategies/hybrid_strategy.py     # Hybrid trading approach
 
-4. OPTIONAL STATE FILES (for history preservation):
-   📊 bot_state.json
-   📊 trade_log.csv
-   📊 performance_report.csv
+4. ADVANCED SUPPORT MODULES:
+   ✅ enhanced_multi_strategy.py       # Enhanced strategy coordination
+   ✅ institutional_strategies.py     # Institutional-grade algorithms
+   ✅ log_utils.py                    # Logging and performance tracking
+   ✅ performance_tracker.py          # Trade performance analysis
+   ✅ enhanced_config.py              # Configuration management
+   ✅ state_manager.py                # Trading state persistence
+   ✅ success_rate_enhancer.py        # Success rate optimization
 
-TOTAL CORE FILES: ~15 files
-ESTIMATED SIZE: < 1 MB
+5. AI ENHANCEMENT MODULES (PHASE 3):
+   ✅ pattern_recognition_ai.py       # Advanced Pattern Recognition AI (Week 2)
+   ✅ lstm_ai.py                      # LSTM Neural Network AI (Week 1)
+
+6. DEPLOYMENT TOOLS:
+   ✅ aws_deploy_live_data.sh         # Linux/Mac deployment script
+   ✅ aws_deploy_live_data.ps1        # Windows PowerShell deployment script
+   ✅ aws_verify_deployment.py        # Deployment verification script
+   ✅ AWS_LIVE_DATA_DEPLOYMENT_GUIDE.md  # Complete deployment guide
+
+6. OPTIONAL STATE FILES (preserve trading history):
+   📊 bot_state.json                   # Current bot state
+   📊 trade_log.csv                    # Trading history
+   📊 performance_report.csv           # Performance analytics
+
+TOTAL CORE FILES: ~22 files
+ESTIMATED SIZE: < 3 MB
+
+NEW LIVE DATA CAPABILITIES:
+--------------------------
+🚀 Real-time price feeds from Binance US (30-second updates)
+📊 Multi-timeframe analysis (1m, 5m, 15m, 1h)
+⚡ Price jump detection (spike/short/medium/long timeframes)
+📈 MA7/MA25 crossover with absolute priority
+💎 3-layer trading system (Layer 1: MA crossover, Layer 2: Scalping, Layer 3: Range-bound)
+🎯 Progressive profit targets (0.3%, 0.5%, 1%, 2%, 3%)
+🛡️ Advanced risk management with dynamic stop losses
+📊 Volume analysis and confirmation
+🔄 Continuous market analysis and trend detection
 
 FILES TO EXCLUDE:
 -----------------
 ❌ All test_*.py files
-❌ All *.md documentation files
+❌ All *.md documentation files (except deployment guide)
 ❌ All backup files (enhanced_config.json.backup_*)
 ❌ __pycache__/ directories
 ❌ .git/ directory
-❌ bot_log.txt
+❌ bot_log.txt (will be created on AWS)
 ❌ Any analyze_*.py files
+❌ live_data_test.py (local testing only)
+❌ bot_data_monitor.py (local monitoring only)
 
-DEPLOYMENT NOTES:
------------------
-1. Create virtual environment on AWS: python -m venv crypto_bot_env
-2. Activate environment: source crypto_bot_env/bin/activate
-3. Install dependencies: pip install -r requirements.txt
-4. Update config.py with your API keys (or use environment variables)
-5. Run bot: python bot.py
+DEPLOYMENT METHODS:
+------------------
+
+AUTOMATED (RECOMMENDED):
+   Windows: .\aws_deploy_live_data.ps1
+   Linux/Mac: ./aws_deploy_live_data.sh
+
+MANUAL UPLOAD:
+   See AWS_LIVE_DATA_DEPLOYMENT_GUIDE.md for detailed instructions
+
+VERIFICATION:
+   python3 aws_verify_deployment.py
 
 SECURITY REMINDER:
 -----------------
 ⚠️  Your API keys are in config.py - consider using environment variables for production
-⚠️  Never expose your API keys in logs or version control
+⚠️  Set secure file permissions: chmod 600 config.py
+⚠️  Monitor AWS costs and instance usage
+⚠️  Test with small amounts before full deployment
+⚠️  Enable CloudWatch monitoring for production use
+
+EXPECTED PERFORMANCE WITH LIVE DATA:
+-----------------------------------
+• 30-second analysis loops for responsive trading
+• MA7/MA25 crossover detection within 1-2 minutes
+• Price jump detection for moves ≥0.5%
+• Multi-layer profit accumulation (2.5% daily target)
+• Advanced risk management with dynamic limits
+• Real-time bid/ask spread analysis
+• Volume-confirmed signal generation

@@ -1,0 +1,74 @@
+{
+  "signal_outcomes": [
+    {
+      "timestamp": "2025-08-15T18:49:01.203554",
+      "signal_type": "death_cross",
+      "signal_details": {
+        "action": "BUY",
+        "crossover_type": "death_cross",
+        "ema7": 14.95,
+        "ema25": 15.05,
+        "confidence": 0.8,
+        "symbol": "EGLD/USDT"
+      },
+      "mistake_type": "wrong_direction",
+      "loss_pct": 2.5,
+      "learning_points": [
+        "Death cross should NEVER result in BUY signal",
+        "When EMA7 crosses below EMA25, market sentiment is bearish",
+        "Dip buying should be disabled during bearish crossover trends",
+        "Death cross = SELL or HOLD only, never BUY"
+      ]
+    },
+    {
+      "timestamp": "2025-08-15T18:57:42.148147",
+      "signal_type": "death_cross",
+      "signal_details": {
+        "action": "BUY",
+        "crossover_type": "death_cross",
+        "ema7": 14.95,
+        "ema25": 15.05,
+        "confidence": 0.8,
+        "symbol": "EGLD/USDT"
+      },
+      "mistake_type": "wrong_direction",
+      "loss_pct": 2.5,
+      "learning_points": [
+        "Death cross should NEVER result in BUY signal",
+        "When EMA7 crosses below EMA25, market sentiment is bearish",
+        "Dip buying should be disabled during bearish crossover trends",
+        "Death cross = SELL or HOLD only, never BUY"
+      ]
+    }
+  ],
+  "mistake_patterns": {
+    "death_cross_buy_mistake": {
+      "count": 2,
+      "total_loss_pct": 5.0,
+      "avg_loss_pct": 2.5,
+      "learned_rules": [
+        {
+          "rule": "NEVER_BUY_ON_DEATH_CROSS",
+          "confidence": 0.92,
+          "learned_from_mistakes": 1,
+          "description": "Death cross signals should never trigger buy orders - always SELL or HOLD"
+        },
+        {
+          "rule": "NEVER_BUY_ON_DEATH_CROSS",
+          "confidence": 0.9400000000000001,
+          "learned_from_mistakes": 2,
+          "description": "Death cross signals should never trigger buy orders - always SELL or HOLD"
+        }
+      ]
+    }
+  },
+  "accuracy_stats": {},
+  "learned_rules": [
+    {
+      "rule": "NEVER_BUY_ON_DEATH_CROSS",
+      "confidence": 0.9400000000000001,
+      "learned_from_mistakes": 2,
+      "description": "Death cross signals should never trigger buy orders - always SELL or HOLD"
+    }
+  ]
+}

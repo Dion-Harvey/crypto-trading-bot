@@ -1,0 +1,237 @@
+{
+  "pine_script": {
+    "performance": {
+      "strategy": "Pine Script RSI",
+      "total_trades": 10,
+      "completed_trades": 10,
+      "total_return_pct": 1.6959365919387182,
+      "win_rate": 70.0,
+      "avg_trade_pct": 0.1701106411183858,
+      "max_drawdown_pct": 2.1135018732011472,
+      "final_value": 101.69593659193872,
+      "trades_per_day": 3.3333333333333335
+    },
+    "trades": [
+      {
+        "timestamp": "2025-07-17 20:20:00",
+        "action": "BUY",
+        "price": 118953.27,
+        "amount": 0.0008498771523337261,
+        "rsi": 30.70640274354068,
+        "portfolio_value": 101.09566636838485
+      },
+      {
+        "timestamp": "2025-07-17 21:50:00",
+        "action": "SELL",
+        "price": 120325.91,
+        "amount": 0.0008498771523337261,
+        "rsi": 67.48443924398302,
+        "portfolio_value": 102.26224174276422,
+        "entry_price": 118953.27,
+        "pnl_pct": 1.1539321281373764,
+        "reason": "RSI_OVERBOUGHT_EXIT"
+      },
+      {
+        "timestamp": "2025-07-17 23:00:00",
+        "action": "BUY",
+        "price": 119994.29,
+        "amount": 0.0008522258996054247,
+        "rsi": 40.89536339475891,
+        "portfolio_value": 102.26224174276422
+      },
+      {
+        "timestamp": "2025-07-18 01:45:00",
+        "action": "SELL",
+        "price": 120342.27,
+        "amount": 0.0008522258996054247,
+        "rsi": 68.16409886776573,
+        "portfolio_value": 102.55879931130892,
+        "entry_price": 119994.29,
+        "pnl_pct": 0.28999713236355706,
+        "reason": "RSI_OVERBOUGHT_EXIT"
+      },
+      {
+        "timestamp": "2025-07-18 09:05:00",
+        "action": "BUY",
+        "price": 118823.04,
+        "amount": 0.0008631221631032914,
+        "rsi": 32.26517093474777,
+        "portfolio_value": 102.55879931130892
+      },
+      {
+        "timestamp": "2025-07-18 13:00:00",
+        "action": "SELL",
+        "price": 119210.0,
+        "amount": 0.0008631221631032914,
+        "rsi": 53.22379725085878,
+        "portfolio_value": 102.89279306354337,
+        "entry_price": 118823.04,
+        "pnl_pct": 0.32566074727595457,
+        "reason": "RSI_OVERBOUGHT_EXIT"
+      },
+      {
+        "timestamp": "2025-07-18 13:25:00",
+        "action": "BUY",
+        "price": 118948.63,
+        "amount": 0.0008650187317293471,
+        "rsi": 33.957972994925825,
+        "portfolio_value": 102.89279306354337
+      },
+      {
+        "timestamp": "2025-07-18 14:35:00",
+        "action": "SELL",
+        "price": 117670.67,
+        "amount": 0.0008650187317293471,
+        "rsi": 26.36593629329336,
+        "portfolio_value": 101.78733372514253,
+        "entry_price": 118948.63,
+        "pnl_pct": -1.0743797553616266,
+        "reason": "STOP_LOSS"
+      },
+      {
+        "timestamp": "2025-07-18 14:40:00",
+        "action": "BUY",
+        "price": 117883.23,
+        "amount": 0.000863458981613776,
+        "rsi": 34.05248070886847,
+        "portfolio_value": 101.78733372514253
+      },
+      {
+        "timestamp": "2025-07-18 21:55:00",
+        "action": "SELL",
+        "price": 117777.38,
+        "amount": 0.000863458981613776,
+        "rsi": 66.97633197789607,
+        "portfolio_value": 101.69593659193872,
+        "entry_price": 117883.23,
+        "pnl_pct": -0.08979224610658469,
+        "reason": "RSI_OVERBOUGHT_EXIT"
+      }
+    ]
+  },
+  "bot_strategy": {
+    "performance": {
+      "strategy": "Our Bot MA Strategy",
+      "total_trades": 23,
+      "completed_trades": 23,
+      "total_return_pct": -0.5772397547419672,
+      "win_rate": 26.08695652173913,
+      "avg_trade_pct": -0.06285185439502061,
+      "max_drawdown_pct": 0.7571658615788747,
+      "final_value": 99.42276024525803,
+      "trades_per_day": 7.666666666666667
+    },
+    "trades": [
+      {
+        "timestamp": "2025-07-19 05:50:00",
+        "action": "BUY",
+        "price": 118364.35,
+        "amount": 0.00033640533970741076,
+        "ma7": 118318.9942857143,
+        "ma25": 118312.5952,
+        "portfolio_value": 99.54599842749215
+      },
+      {
+        "timestamp": "2025-07-19 06:30:00",
+        "action": "SELL",
+        "price": 118251.74,
+        "amount": 0.00033640533970741076,
+        "ma7": 118289.7242857143,
+        "ma25": 118293.4088,
+        "portfolio_value": 99.5081158221877,
+        "entry_price": 118364.35,
+        "pnl_pct": -0.09513844328972412,
+        "reason": "DEATH_CROSS"
+      },
+      {
+        "timestamp": "2025-07-19 07:15:00",
+        "action": "BUY",
+        "price": 118301.83,
+        "amount": 0.0003364550347942638,
+        "ma7": 118294.23,
+        "ma25": 118290.4364,
+        "portfolio_value": 99.5081158221877
+      },
+      {
+        "timestamp": "2025-07-19 08:25:00",
+        "action": "SELL",
+        "price": 118232.83,
+        "amount": 0.0003364550347942638,
+        "ma7": 118281.92285714285,
+        "ma25": 118292.1416,
+        "portfolio_value": 99.4849004247869,
+        "entry_price": 118301.83,
+        "pnl_pct": -0.05832538685158125,
+        "reason": "DEATH_CROSS"
+      },
+      {
+        "timestamp": "2025-07-19 09:30:00",
+        "action": "BUY",
+        "price": 118364.66,
+        "amount": 0.0003361979848538809,
+        "ma7": 118281.73285714285,
+        "ma25": 118271.48359999999,
+        "portfolio_value": 99.4849004247869
+      },
+      {
+        "timestamp": "2025-07-19 12:05:00",
+        "action": "SELL",
+        "price": 118350.0,
+        "amount": 0.0003361979848538809,
+        "ma7": 118409.66714285713,
+        "ma25": 118412.442,
+        "portfolio_value": 99.47997176232894,
+        "entry_price": 118364.66,
+        "pnl_pct": -0.012385453563591947,
+        "reason": "DEATH_CROSS"
+      },
+      {
+        "timestamp": "2025-07-19 13:45:00",
+        "action": "BUY",
+        "price": 118342.5,
+        "amount": 0.0003362442799918168,
+        "ma7": 118353.11714285714,
+        "ma25": 118345.1528,
+        "portfolio_value": 99.47997176232894
+      },
+      {
+        "timestamp": "2025-07-19 13:55:00",
+        "action": "SELL",
+        "price": 118286.49,
+        "amount": 0.0003362442799918168,
+        "ma7": 118334.2657142857,
+        "ma25": 118336.66519999999,
+        "portfolio_value": 99.4611387202066,
+        "entry_price": 118342.5,
+        "pnl_pct": -0.0473287280562729,
+        "reason": "DEATH_CROSS"
+      },
+      {
+        "timestamp": "2025-07-19 14:00:00",
+        "action": "BUY",
+        "price": 118362.94,
+        "amount": 0.0003361225691764892,
+        "ma7": 118334.90857142858,
+        "ma25": 118334.7884,
+        "portfolio_value": 99.4611387202066
+      },
+      {
+        "timestamp": "2025-07-19 14:05:00",
+        "action": "SELL",
+        "price": 118248.76,
+        "amount": 0.0003361225691764892,
+        "ma7": 118321.51714285716,
+        "ma25": 118330.7388,
+        "portfolio_value": 99.42276024525803,
+        "entry_price": 118362.94,
+        "pnl_pct": -0.0964660053222804,
+        "reason": "DEATH_CROSS"
+      }
+    ]
+  },
+  "analysis_period": {
+    "start": "2025-07-16 14:30:00",
+    "end": "2025-07-19 14:25:00",
+    "bars": 864
+  }
+}

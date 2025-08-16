@@ -1,0 +1,16 @@
+# AWS-ONLY EXECUTION LOCK
+# This file indicates the bot should ONLY run on AWS
+# 
+# 🚨 DO NOT DELETE THIS FILE
+#
+# Purpose: Prevents accidental local execution
+# AWS IP: 3.135.216.32
+# Local execution is BLOCKED to prevent interference
+#
+# To run the bot:
+# 1. SSH into AWS: ssh -i cryptobot-key.pem ubuntu@3.135.216.32
+# 2. Navigate: cd ~/crypto-trading-bot  
+# 3. Start bot: .venv/bin/python bot.py
+#
+# Created: 2025-08-08
+# Protected: Trading Bot Instance

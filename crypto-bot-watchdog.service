@@ -1,0 +1,30 @@
+[Unit]
+Description=Crypto Trading Bot Watchdog
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/crypto-trading-bot-deploy
+Environment=PATH=/home/ubuntu/crypto-trading-bot-deploy/.venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/ubuntu/crypto-trading-bot-deploy/.venv/bin/python /home/ubuntu/crypto-trading-bot-deploy/crypto-bot-watchdog.py
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+# Resource limits
+MemoryLimit=1G
+CPUQuota=50%
+
+# Security settings
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/home/ubuntu/crypto-trading-bot-deploy
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
