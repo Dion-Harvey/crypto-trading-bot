@@ -330,12 +330,12 @@
   },
   "api_keys": {
     "binance": {
-      "api_key": "bN4mjzb1pIfmRZCit0zjqxACIv1JszpbPDi3Zlhbh1961qsFgvwio6UWzIyUwQND",
-      "api_secret": "sWiP8bJdgW0VoxSyZ74EDls6PnSwciLYNuYgkgrVjmngsSGZW2JXfda1lFOzsthG",
+      "api_key": "${BINANCE_API_KEY}",
+      "api_secret": "${BINANCE_API_SECRET}",
       "sandbox": false
     },
     "gemini_ai": {
-      "api_key": "AIzaSyCmbplERiFZ1Y-HKQZU94HQme6zv0hO0dk",
+      "api_key": "${GEMINI_API_KEY}",
       "enabled": true,
       "daily_limit": 100,
       "cost_per_1k_tokens": 0.00015,

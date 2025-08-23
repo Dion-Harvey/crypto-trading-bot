@@ -9,9 +9,11 @@ $AWS_USER = "ubuntu"
 $AWS_HOST = "3.135.216.32"
 $AWS_PATH = "~/crypto-trading-bot/"
 
-# Working API keys from local config
-$API_KEY = "bN4mjzb1pIfmRZCit0zjqxACIv1JszpbPDi3Zlhbh1961qsFgvwio6UWzIyUwQND"
-$API_SECRET = "Rq5p1qTSwq4qmb8xgb7kdKHZGlPVvIaiakF5jiu43dknp0nGg17jDLtuIwZ1cWza"
+# Load API keys from environment (set before running) or fallback to placeholders
+$API_KEY = $Env:BINANCE_API_KEY
+$API_SECRET = $Env:BINANCE_API_SECRET
+if (-not $API_KEY) { $API_KEY = "REPLACE_ME" }
+if (-not $API_SECRET) { $API_SECRET = "REPLACE_ME" }
 
 Write-Host "� Method 1: Trying direct SSH connection..." -ForegroundColor Yellow
 
@@ -78,9 +80,10 @@ BINANCE_API_SECRET = `"$API_SECRET`"
     Write-Host "4. Edit config.py:" -ForegroundColor Cyan
     Write-Host "   nano config.py" -ForegroundColor White
     Write-Host ""
-    Write-Host "5. Replace with these working API keys:" -ForegroundColor Cyan
-    Write-Host "   BINANCE_API_KEY = `"$API_KEY`"" -ForegroundColor White
-    Write-Host "   BINANCE_API_SECRET = `"$API_SECRET`"" -ForegroundColor White
+    Write-Host "5. Create/Edit .env with working keys:" -ForegroundColor Cyan
+    Write-Host "   BINANCE_API_KEY=YOUR_KEY" -ForegroundColor White
+    Write-Host "   BINANCE_API_SECRET=YOUR_SECRET" -ForegroundColor White
+    Write-Host "   GEMINI_API_KEY=YOUR_GEMINI_KEY" -ForegroundColor White
     Write-Host ""
     Write-Host "6. Save and exit (Ctrl+X, Y, Enter)" -ForegroundColor Cyan
     Write-Host ""

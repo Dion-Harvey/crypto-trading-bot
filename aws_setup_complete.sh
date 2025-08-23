@@ -29,18 +29,18 @@ if [ -f "requirements.txt" ]; then
     pip3 install --user -r requirements.txt
 fi
 
-# Update config.py with working API keys
-echo "🔧 Updating config.py with working API keys..."
-cat > config.py << 'EOF'
-# config.py
-# Place your Binance API credentials here. Do NOT commit this file to version control!
-
-BINANCE_API_KEY = "bN4mjzb1pIfmRZCit0zjqxACIv1JszpbPDi3Zlhbh1961qsFgvwio6UWzIyUwQND"
-BINANCE_API_SECRET = "Rq5p1qTSwq4qmb8xgb7kdKHZGlPVvIaiakF5jiu43dknp0nGg17jDLtuIwZ1cWza"
-
-EOF
-
-echo "✅ Config.py updated with working API keys"
+if [ ! -f .env ]; then
+    echo "🔧 Creating .env placeholder (edit with real keys)..."
+    cat > .env <<'ENVEOF'
+BINANCE_API_KEY=REPLACE_ME
+BINANCE_API_SECRET=REPLACE_ME
+GEMINI_API_KEY=REPLACE_ME
+ENVEOF
+    chmod 600 .env
+    echo "✅ .env created (place real keys, never commit)"
+else
+    echo "ℹ️ .env already exists - leaving in place"
+fi
 
 # Test the connection
 echo "🧪 Testing API connection..."

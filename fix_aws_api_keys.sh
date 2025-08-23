@@ -18,16 +18,18 @@ if [ -f ~/.ssh/id_rsa ]; then
         cd ~/crypto-trading-bot/
         echo "📝 Backing up current config..."
         cp config.py config.py.backup.$(date +%Y%m%d_%H%M%S)
-        
-        echo "🔧 Updating config.py with working API keys..."
-        cat > config.py << 'CONFIG_EOF'
-# config.py
-# Place your Binance API credentials here. Do NOT commit this file to version control!
-
-BINANCE_API_KEY = "bN4mjzb1pIfmRZCit0zjqxACIv1JszpbPDi3Zlhbh1961qsFgvwio6UWzIyUwQND"
-BINANCE_API_SECRET = "Rq5p1qTSwq4qmb8xgb7kdKHZGlPVvIaiakF5jiu43dknp0nGg17jDLtuIwZ1cWza"
-
-CONFIG_EOF
+        echo "🔧 Ensuring .env exists (place real keys manually if needed)..."
+        if [ ! -f .env ]; then
+            cat > .env <<'ENVEOF'
+BINANCE_API_KEY=REPLACE_ME
+BINANCE_API_SECRET=REPLACE_ME
+GEMINI_API_KEY=REPLACE_ME
+ENVEOF
+            chmod 600 .env
+            echo "✅ .env created with placeholders"
+        else
+            echo "ℹ️ .env already present"
+        fi
         
         echo "✅ Config updated! Testing connection..."
         python3 connection_test.py
@@ -55,9 +57,10 @@ else
     echo "4. Edit config.py:"
     echo "   nano config.py"
     echo ""
-    echo "5. Replace with working API keys:"
-    echo "   BINANCE_API_KEY = \"bN4mjzb1pIfmRZCit0zjqxACIv1JszpbPDi3Zlhbh1961qsFgvwio6UWzIyUwQND\""
-    echo "   BINANCE_API_SECRET = \"Rq5p1qTSwq4qmb8xgb7kdKHZGlPVvIaiakF5jiu43dknp0nGg17jDLtuIwZ1cWza\""
+    echo "5. Create/Edit .env with working keys:"
+    echo "   BINANCE_API_KEY=YOUR_KEY"
+    echo "   BINANCE_API_SECRET=YOUR_SECRET"
+    echo "   GEMINI_API_KEY=YOUR_GEMINI_KEY"
     echo ""
     echo "6. Save and exit (Ctrl+X, Y, Enter)"
     echo ""
