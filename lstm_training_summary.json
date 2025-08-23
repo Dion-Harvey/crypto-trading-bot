@@ -1,0 +1,34 @@
+{
+  "training_date": "2025-08-20T18:27:28.861645",
+  "total_models": 4,
+  "successful_models": 4,
+  "existing_model_files": 4,
+  "results": {
+    "1m": true,
+    "5m": true,
+    "15m": true,
+    "1h": true
+  },
+  "stats": {
+    "1m": {
+      "success": true,
+      "training_time": 0.18016314506530762,
+      "data_points": 1000
+    },
+    "5m": {
+      "success": true,
+      "training_time": 0.48284435272216797,
+      "data_points": 800
+    },
+    "15m": {
+      "success": true,
+      "training_time": 0.4245762825012207,
+      "data_points": 672
+    },
+    "1h": {
+      "success": true,
+      "training_time": 0.686753511428833,
+      "data_points": 500
+    }
+  }
+}
