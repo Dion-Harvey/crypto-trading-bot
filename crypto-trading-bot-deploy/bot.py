@@ -106,6 +106,7 @@ check_aws_environment()
 
 # Import required libraries
 import ccxt
+import json
 import time
 import re
 import datetime
@@ -646,6 +647,77 @@ def safe_api_call(func, *args, max_retries=3, **kwargs):
 
     # Should never reach here, but just in case
     raise RuntimeError(f"API call failed after {max_retries} attempts")
+
+def detect_and_adopt_existing_positions():
+    """
+    🔍 Automatically detect existing crypto positions and set up trailing stop protection
+    This enables existing holdings like LINK to be automatically protected
+    """
+    try:
+        print("\n🔍 Scanning existing positions for automatic protection...")
+        
+        # Get current balances
+        balance = safe_api_call(exchange.fetch_balance)
+        
+        # Look for crypto holdings (excluding USDT)
+        crypto_positions = {}
+        for coin, amount in balance['total'].items():
+            if coin != 'USDT' and amount > 0:
+                # Only consider positions worth more than $5 to avoid dust
+                try:
+                    ticker_symbol = f"{coin}/USDT"
+                    if ticker_symbol in exchange.markets:
+                        ticker = safe_api_call(exchange.fetch_ticker, ticker_symbol)
+                        usd_value = amount * ticker['last']
+                        if usd_value >= 5.0:
+                            crypto_positions[ticker_symbol] = {
+                                'amount': amount,
+                                'current_price': ticker['last'],
+                                'usd_value': usd_value
+                            }
+                            print(f"💰 Found position: {ticker_symbol} - Balance: {amount} {coin} (Value: ${usd_value:.2f})")
+                except Exception as e:
+                    continue
+        
+        # Set up trailing stop protection for found positions
+        for symbol, position in crypto_positions.items():
+            try:
+                print(f"🎯 PLACING INITIAL TRAILING STOP-LIMIT: {symbol} at 1% trail")
+                
+                # Calculate 1% trailing stop price (1% below current price)
+                stop_price = position['current_price'] * 0.99
+                limit_price = stop_price * 0.995  # Limit slightly below stop
+                
+                # Place initial trailing stop-limit order
+                order = safe_api_call(
+                    exchange.create_order,
+                    symbol,
+                    'STOP_LOSS_LIMIT',
+                    'sell',
+                    position['amount'],
+                    limit_price,
+                    {
+                        'stopPrice': stop_price,
+                        'timeInForce': 'GTC'
+                    }
+                )
+                
+                print(f"✅ Trailing stop-limit placed: {symbol}")
+                print(f"   Stop Price: ${stop_price:.6f} (1% below current)")
+                print(f"   Limit Price: ${limit_price:.6f}")
+                print(f"   Protected Amount: {position['amount']} {symbol.split('/')[0]}")
+                
+            except Exception as e:
+                print(f"⚠️ Could not place trailing stop for {symbol}: {e}")
+                continue
+        
+        if not crypto_positions:
+            print("💡 No significant crypto positions found (>$5 value)")
+        else:
+            print(f"🛡️ Automatic protection setup complete for {len(crypto_positions)} positions")
+            
+    except Exception as e:
+        print(f"⚠️ Error detecting existing positions: {e}")
 
 # =============================================================================
 # DYNAMIC RISK MANAGEMENT FUNCTIONS
@@ -3011,6 +3083,9 @@ def test_connection():
 
         # Display current bot state
         state_manager.print_current_state()
+        
+        # Check for existing positions to adopt with trailing stops
+        detect_and_adopt_existing_positions()
 
         # Check for existing position recovery
         if state_manager.is_in_trade():
@@ -5127,6 +5202,29 @@ def monitor_and_update_trailing_stop():
     except Exception as e:
         log_message(f"⚠️ Error in trailing stop monitor: {e}")
 
+"""(Deploy Variant) Added heartbeat writer for dashboard liveness detection."""
+
+# Heartbeat (deploy variant) - duplicated minimal logic to avoid import coupling
+try:
+    import json as _json
+    import datetime as _dt
+    from threading import Lock as _Lock
+    _DEPLOY_HB_LOCK = _Lock()
+    def _deploy_write_heartbeat(status="RUNNING", extra: dict | None = None):  # type: ignore[valid-type]
+        try:
+            payload = {"timestamp": _dt.datetime.utcnow().isoformat(), "status": status}
+            if extra:
+                for k, v in list(extra.items())[:6]:
+                    payload[k] = v
+            with _DEPLOY_HB_LOCK:
+                with open("bot_heartbeat.json", "w", encoding="utf-8") as f:
+                    _json.dump(payload, f)
+        except Exception:
+            pass
+except Exception:
+    def _deploy_write_heartbeat(status="RUNNING", extra=None):
+        pass
+
 def run_continuously(interval_seconds=60):
     """
     🎯 AGGRESSIVE DAY TRADING BOT - MA7/MA25 Crossover Priority
@@ -5145,6 +5243,8 @@ def run_continuously(interval_seconds=60):
     print("🎯 DAILY TARGET: 2.5% through high-frequency accumulation")
     print("🎯 LAYER 1 ENHANCED: 4-10 trades/day, 0.5-2% targets (increased frequency)")
     print("="*70)
+
+    _deploy_write_heartbeat("STARTING")
 
     while True:
         # 🔄 RUNTIME CONFIG RELOAD - Check for multi-pair scanner updates
@@ -5176,9 +5276,18 @@ def run_continuously(interval_seconds=60):
         print("   L4: RSI Mean Reversion (5-12 trades/day, 0.3-1.0% targets)")
         
         # 🎯 Display supported pairs and current active pair
-        supported_pairs = bot_config.get_supported_pairs()
+        try:
+            # Read the comprehensive configuration for accurate pair count
+            with open('comprehensive_all_pairs_config.json', 'r') as f:
+                comprehensive_config = json.load(f)
+                total_pairs = comprehensive_config.get('total_supported_pairs', 235)
+        except:
+            # Fallback to config.py if comprehensive config unavailable
+            supported_pairs = bot_config.get_supported_pairs()
+            total_pairs = len(supported_pairs)
+        
         active_symbol = bot_config.get_current_trading_symbol()
-        print(f"📊 MULTI-PAIR MONITORING: {len(supported_pairs)} pairs tracked")
+        print(f"📊 MULTI-PAIR MONITORING: {total_pairs} pairs tracked")
         print(f"🎯 CURRENT ACTIVE PAIR: {active_symbol}")
         print("="*50, flush=True)
 
@@ -6499,6 +6608,9 @@ def run_continuously(interval_seconds=60):
 
         except Exception as e:
             print("❌ Error in trading loop:", e, flush=True)
+            _deploy_write_heartbeat("ERROR", {"error": str(e)[:120]})
+        finally:
+            _deploy_write_heartbeat("RUNNING")
 
         # Add heartbeat before sleep
         print(f"💓 Loop completed, sleeping for {interval_seconds} seconds...", flush=True)
