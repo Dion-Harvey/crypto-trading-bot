@@ -117,13 +117,13 @@
     "trailing_stop_pct": 0.0025,
     "binance_native_trailing": {
       "enabled": true,
-      "trailing_percent": 0.50,
+      "trailing_percent": 0.5,
       "activation_percent": 0.125,
       "min_notional": 5.0,
       "replace_manual_trailing": true,
       "use_for_all_positions": true,
       "emergency_fallback": true,
-      "profit_limit_percent": 0.50
+      "profit_limit_percent": 0.5
     },
     "minimum_hold_time_minutes": 5,
     "profit_lock_threshold": 0.015,
@@ -333,6 +333,13 @@
       "api_key": "bN4mjzb1pIfmRZCit0zjqxACIv1JszpbPDi3Zlhbh1961qsFgvwio6UWzIyUwQND",
       "api_secret": "sWiP8bJdgW0VoxSyZ74EDls6PnSwciLYNuYgkgrVjmngsSGZW2JXfda1lFOzsthG",
       "sandbox": false
+    },
+    "gemini_ai": {
+      "api_key": "AIzaSyCmbplERiFZ1Y-HKQZU94HQme6zv0hO0dk",
+      "enabled": true,
+      "daily_limit": 100,
+      "cost_per_1k_tokens": 0.00015,
+      "description": "Google Gemini AI for technical analysis - Phase 1 LLM integration"
     }
   },
   "_comment": "\u00f0\u0178\u017d\u00af DAY TRADER OPTIMIZED CONFIGURATION - More aggressive thresholds for active trading",
@@ -389,6 +396,17 @@
     "reason": "XLM +11.70% emergency opportunity",
     "switched_at": "2025-08-04T18:36:23.636876",
     "urgency": "CRITICAL"
+  },
+  "emergency_protection": {
+    "spike_chasing_protection": true,
+    "max_spike_threshold_pct": 8.0,
+    "spike_cooldown_minutes": 30,
+    "description": "Prevents buying after major price spikes to avoid bad entries"
+  },
+  "stop_loss_reserve": {
+    "enabled": true,
+    "reserve_percentage": 0.05,
+    "description": "Reserves 5% of portfolio specifically for stop-loss order placement"
   },
   "multi_currency": {
     "enabled": true,
@@ -985,6 +1003,33 @@
         "VTHO/USD",
         "ZIL/USD"
       ]
+    }
+  },
+  "lstm_predictor": {
+    "enabled": true,
+    "sequence_length": 45,
+    "prediction_horizon": 3,
+    "lstm_units": 96,
+    "dropout_rate": 0.15,
+    "learning_rate": 0.0005,
+    "batch_size": 64,
+    "epochs": 100,
+    "validation_split": 0.25,
+    "min_training_samples": 300,
+    "confidence_threshold": 0.68,
+    "min_accuracy_threshold": 0.55,
+    "retrain_interval_hours": 4,
+    "volatile_retrain_hours": 3,
+    "calm_retrain_hours": 8,
+    "retrain_accuracy_threshold": 0.56,
+    "model_dir": "models/lstm",
+    "early_stopping_patience": 10,
+    "reduce_lr_patience": 5,
+    "feature_engineering": {
+      "add_technical_indicators": true,
+      "add_price_ratios": true,
+      "add_volume_indicators": true,
+      "lookback_periods": [3, 7, 14, 21]
     }
   }
 }

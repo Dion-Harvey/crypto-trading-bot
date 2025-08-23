@@ -77,3 +77,6 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
+
+# Trading reports
+trading_report_*.md
